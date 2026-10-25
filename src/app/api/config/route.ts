@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getBrevoConfig } from "@/lib/brevo";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const config = getBrevoConfig();
   const apiKey = config.apiKey?.trim();

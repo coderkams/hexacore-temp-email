@@ -13,7 +13,12 @@ export const metadata: Metadata = {
   title: "Hexacore Email Studio — Composable Open Finance",
   description: "Next.js email template builder and Brevo API dispatcher for Hexacore Open Finance Platform.",
   icons: {
-    icon: "/hexacore-icon.png",
+    icon: [
+      { url: "/hexacore-icon.png", type: "image/png" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    shortcut: "/hexacore-icon.png",
+    apple: "/hexacore-icon.png",
   },
 };
 
