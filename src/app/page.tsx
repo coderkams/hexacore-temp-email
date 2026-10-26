@@ -1,12 +1,16 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   templateList, 
   templates, 
   getTemplateById 
 } from "@/templates";
-import { TemplateType, SendEmailResult } from "@/lib/types";
+import { TemplateType, SendEmailResult, CampaignRecipient } from "@/lib/types";
+import { supabase } from "@/lib/supabase";
+import { normalizeSubject } from "@/lib/brevo-realtime";
 import { 
   Mail, 
   Search, 
@@ -51,7 +55,14 @@ import {
   RefreshCw,
   CheckCheck,
   MailOpen,
-  Info
+  Info,
+  FileSpreadsheet,
+  UploadCloud,
+  LogOut,
+  MailCheck,
+  MousePointerClick,
+  AlertTriangle,
+  Activity
 } from "lucide-react";
 import {
   Select,
@@ -69,16 +80,102 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarEdgeTrigger } from "@/components/ui/sidebar-edge-trigger";
+import BulkEmailStudio from "@/components/bulk/BulkEmailStudio";
 
-interface CampaignRecord {
+export interface CampaignRecord {
   id: string;
   subject: string;
   audience: string;
-  status: "pending" | "sent" | "delivered" | "failed";
+  status: "pending" | "sent" | "delivered" | "failed" | "opened" | "clicked" | "bounced";
   created_at: string;
   opens: number;
   clicks: number;
   content?: string;
+  recipients?: CampaignRecipient[];
+}
+
+/**
+ * Pure authentic recipient resolver (ZERO mock/demo data).
+ */
+function resolveCampaignRecipients(c: CampaignRecord, realtimeRecipients?: CampaignRecipient[]): CampaignRecipient[] {
+  // 1. Direct array if already present from Brevo live telemetry or campaign dispatch
+  if (Array.isArray(c.recipients) && c.recipients.length > 0) {
+    return c.recipients;
+  }
+
+  // 2. Real-time recipients passed directly
+  if (Array.isArray(realtimeRecipients) && realtimeRecipients.length > 0) {
+    return realtimeRecipients;
+  }
+
+  // 3. Check localStorage cache for freshly dispatched campaigns
+  if (typeof window !== "undefined" && c.id) {
+    try {
+      const cached = localStorage.getItem(`hexacore_campaign_recipients_${c.id}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 4. Check for embedded metadata in content
+  if (c.content) {
+    const match = c.content.match(/<!-- HEXACORE_RECIPIENTS: ([\s\S]*?) -->/);
+    if (match) {
+      try {
+        const parsed = JSON.parse(match[1]);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // 5. Individual email extraction from audience field
+  const aud = (c.audience || "").toLowerCase();
+  if (aud.includes("@")) {
+    const emailMatch = c.audience.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    if (emailMatch) {
+      return [
+        {
+          email: emailMatch[0],
+          name: emailMatch[0].split("@")[0].replace(/[._-]/g, " "),
+          status: (c.status as any) || "delivered",
+          deliveredAt: c.created_at,
+          metadata: { Channel: "Verified User", Method: "Direct Dispatch" },
+        },
+      ];
+    }
+  }
+
+  // 6. Check if email content contains a specific recipient email address
+  if (c.content) {
+    const emails = c.content.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
+    const cleanEmail = emails?.find(
+      (e) => !e.includes("hexacore.ng") && !e.includes("example.com") && !e.includes("w3.org")
+    );
+    if (cleanEmail) {
+      return [
+        {
+          email: cleanEmail,
+          name: cleanEmail.split("@")[0].replace(/[._-]/g, " "),
+          status: (c.status as any) || "delivered",
+          deliveredAt: c.created_at,
+          metadata: { Channel: "Dispatched Recipient" },
+        },
+      ];
+    }
+  }
+
+  // Pure authentic data: return empty array if no real recipients are known yet.
+  return [];
 }
 
 export interface InboxMessage {
@@ -97,8 +194,142 @@ export interface InboxMessage {
 const INITIAL_CAMPAIGNS: CampaignRecord[] = [];
 
 export default function EmailDashboardPage() {
-  // Navigation: side menu controls active view ("compose" | "history" | "inbox")
-  const [activeView, setActiveView] = useState<"compose" | "history" | "inbox">("compose");
+  const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ name: string; email: string; company?: string } | null>(null);
+
+  // Auth Guard: Listen to Supabase Auth state and sync currentUser
+  useEffect(() => {
+    let isMounted = true;
+
+    async function initializeAuth() {
+      try {
+        const { data, error } = await supabase.auth.getUser();
+        const user = data?.user;
+
+        if (error || !user) {
+          // Check if there was a cached user in localStorage as brief fallback
+          const stored = typeof window !== "undefined" ? localStorage.getItem("hexacore_user") : null;
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored);
+              if (parsed && parsed.isLoggedIn) {
+                const { data: sessionData } = await supabase.auth.getSession();
+                if (sessionData.session) {
+                  if (isMounted) {
+                    setCurrentUser(parsed);
+                    setIsAuthenticated(true);
+                  }
+                  return;
+                }
+              }
+            } catch {
+              // ignore
+            }
+          }
+
+          if (isMounted) {
+            setIsAuthenticated(false);
+            router.replace("/signin");
+          }
+          return;
+        }
+
+        const metadata = user.user_metadata || {};
+        const fullName =
+          metadata.full_name ||
+          (metadata.first_name ? `${metadata.first_name} ${metadata.last_name || ""}`.trim() : null) ||
+          user.email?.split("@")[0] ||
+          "Hexacore User";
+
+        const company = metadata.company || "Hexacore Community";
+
+        const userObj = {
+          name: fullName,
+          email: user.email || "",
+          company,
+        };
+
+        if (isMounted) {
+          setCurrentUser(userObj);
+          setIsAuthenticated(true);
+        }
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem("hexacore_user", JSON.stringify({ ...userObj, isLoggedIn: true }));
+        }
+      } catch (err) {
+        console.warn("Auth initialization error:", err);
+        if (isMounted) {
+          setIsAuthenticated(false);
+          router.replace("/signin");
+        }
+      }
+    }
+
+    initializeAuth();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event: any, session: any) => {
+      if (event === "SIGNED_OUT" || !session) {
+        if (isMounted) {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("hexacore_user");
+          }
+          router.replace("/signin");
+        }
+      } else if (session?.user) {
+        const user = session.user;
+        const metadata = user.user_metadata || {};
+        const fullName =
+          metadata.full_name ||
+          (metadata.first_name ? `${metadata.first_name} ${metadata.last_name || ""}`.trim() : null) ||
+          user.email?.split("@")[0] ||
+          "Hexacore User";
+
+        const company = metadata.company || "Hexacore Community";
+
+        const userObj = {
+          name: fullName,
+          email: user.email || "",
+          company,
+        };
+
+        if (isMounted) {
+          setCurrentUser(userObj);
+          setIsAuthenticated(true);
+        }
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem("hexacore_user", JSON.stringify({ ...userObj, isLoggedIn: true }));
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [router]);
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.warn("Sign out notice:", err);
+    }
+    document.cookie = "hexacore_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("hexacore_user");
+    }
+    router.push("/signin");
+  };
+
+  // Navigation: side menu controls active view ("compose" | "bulk" | "history" | "inbox")
+  const [activeView, setActiveView] = useState<"compose" | "bulk" | "history" | "inbox">("compose");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -122,6 +353,103 @@ export default function EmailDashboardPage() {
   const [modalPreviewHtml, setModalPreviewHtml] = useState<string>("");
   const [previewViewport, setPreviewViewport] = useState<"desktop" | "mobile">("desktop");
 
+  // Campaign Details & Recipients Modal State
+  const [selectedCampaign, setSelectedCampaign] = useState<CampaignRecord | null>(null);
+  const [campaignDetailsOpen, setCampaignDetailsOpen] = useState<boolean>(false);
+  const [campaignModalTab, setCampaignModalTab] = useState<"recipients" | "preview">("recipients");
+  const [recipientSearchQuery, setRecipientSearchQuery] = useState<string>("");
+  const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
+  const [copiedAllEmails, setCopiedAllEmails] = useState<boolean>(false);
+
+  // Real-Time Telemetry State (Brevo Live Sync)
+  const [realtimeData, setRealtimeData] = useState<any | null>(null);
+  const [isSyncingRealtime, setIsSyncingRealtime] = useState<boolean>(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+
+  // Sync real-time events and performance telemetry from Brevo API
+  const syncRealtimeData = async () => {
+    setIsSyncingRealtime(true);
+    try {
+      const res = await fetch("/api/campaigns/realtime");
+      const data = await res.json();
+      if (data.success) {
+        setRealtimeData(data);
+        setLastSyncedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+
+        // Enrich existing campaigns with Brevo live statistics and real recipients
+        setCampaigns((prev) =>
+          prev.map((camp) => {
+            const exact = data.campaignsBySubject[camp.subject];
+            const match =
+              exact ||
+              Object.values(data.campaignsBySubject).find(
+                (s: any) =>
+                  normalizeSubject(s.subject) === normalizeSubject(camp.subject) ||
+                  camp.subject.toLowerCase().includes(normalizeSubject(s.subject)) ||
+                  s.subject.toLowerCase().includes(normalizeSubject(camp.subject))
+              );
+
+            if (match) {
+              const m = match as any;
+              return {
+                ...camp,
+                opens: m.opens,
+                clicks: m.clicks,
+                recipients: m.recipients && m.recipients.length > 0 ? m.recipients : camp.recipients,
+                status: m.clicks > 0 ? "clicked" : m.opens > 0 ? "opened" : m.deliveredCount > 0 ? "delivered" : camp.status,
+              };
+            }
+            return camp;
+          })
+        );
+      }
+    } catch (err) {
+      console.warn("Real-time sync error:", err);
+    } finally {
+      setIsSyncingRealtime(false);
+    }
+  };
+
+  const handleOpenCampaignDetails = (campaign: CampaignRecord) => {
+    // Check if live Brevo telemetry has matching recipient events for this campaign
+    let resolvedRecipients = campaign.recipients;
+    let liveOpens = campaign.opens;
+    let liveClicks = campaign.clicks;
+
+    if (realtimeData?.campaignsBySubject) {
+      const match: any =
+        realtimeData.campaignsBySubject[campaign.subject] ||
+        Object.values(realtimeData.campaignsBySubject).find(
+          (s: any) =>
+            normalizeSubject(s.subject) === normalizeSubject(campaign.subject) ||
+            campaign.subject.toLowerCase().includes(normalizeSubject(s.subject)) ||
+            s.subject.toLowerCase().includes(normalizeSubject(campaign.subject))
+        );
+
+      if (match) {
+        if (match.recipients && match.recipients.length > 0) {
+          resolvedRecipients = match.recipients;
+        }
+        liveOpens = match.opens;
+        liveClicks = match.clicks;
+      }
+    }
+
+    if (!resolvedRecipients || resolvedRecipients.length === 0) {
+      resolvedRecipients = resolveCampaignRecipients(campaign);
+    }
+
+    setSelectedCampaign({
+      ...campaign,
+      opens: liveOpens,
+      clicks: liveClicks,
+      recipients: resolvedRecipients,
+    });
+    setCampaignModalTab("recipients");
+    setRecipientSearchQuery("");
+    setCampaignDetailsOpen(true);
+  };
+
   // Inbox State
   const [inboxMessages, setInboxMessages] = useState<InboxMessage[]>([]);
   const [selectedInboxMessage, setSelectedInboxMessage] = useState<InboxMessage | null>(null);
@@ -130,17 +458,31 @@ export default function EmailDashboardPage() {
   const [inboundGuideModalOpen, setInboundGuideModalOpen] = useState<boolean>(false);
   const [isRefreshingInbox, setIsRefreshingInbox] = useState<boolean>(false);
 
-  // Fetch campaigns from Supabase backend on mount
+  // Fetch campaigns from Supabase backend on mount, then synchronize Brevo telemetry
   useEffect(() => {
     fetch("/api/campaigns")
       .then((res) => res.json())
       .then((data) => {
         if (data.success && Array.isArray(data.campaigns)) {
-          setCampaigns(data.campaigns);
+          const resolved = data.campaigns.map((c: any) => ({
+            ...c,
+            recipients: resolveCampaignRecipients(c),
+          }));
+          setCampaigns(resolved);
         }
       })
-      .catch((err) => console.warn("Supabase fetch notice:", err));
+      .catch((err) => console.warn("Supabase fetch notice:", err))
+      .finally(() => {
+        syncRealtimeData();
+      });
   }, []);
+
+  // Sync real-time data whenever switching to history view
+  useEffect(() => {
+    if (activeView === "history") {
+      syncRealtimeData();
+    }
+  }, [activeView]);
 
   // Fetch inbox messages
   const fetchInbox = async () => {
@@ -364,6 +706,15 @@ export default function EmailDashboardPage() {
 
       if (data.success) {
         const formattedDate = "Just now";
+        const recipientList: CampaignRecipient[] = [
+          {
+            email: recipient,
+            name: recipientDisplayName,
+            status: (data.mode === "live" ? "delivered" : "sent") as "delivered" | "sent",
+            deliveredAt: formattedDate,
+            metadata: { Audience: audienceLabelMap[audience] || audience },
+          },
+        ];
 
         const newRecord: CampaignRecord = {
           id: `camp-${Date.now()}`,
@@ -374,7 +725,19 @@ export default function EmailDashboardPage() {
           opens: 0,
           clicks: 0,
           content: messageContent,
+          recipients: recipientList,
         };
+
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem(
+              `hexacore_campaign_recipients_${newRecord.id}`,
+              JSON.stringify(recipientList)
+            );
+          } catch {
+            // ignore
+          }
+        }
 
         setCampaigns((prev) => [newRecord, ...prev]);
       }
@@ -407,12 +770,28 @@ export default function EmailDashboardPage() {
   };
 
   // Status Badge Component
-  const renderStatusBadge = (status: CampaignRecord["status"]) => {
+  const renderStatusBadge = (status: CampaignRecord["status"] | string) => {
     if (status === "pending") {
       return (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-200">
           <Clock className="w-3.5 h-3.5 text-amber-500" />
           PENDING
+        </span>
+      );
+    }
+    if (status === "clicked") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs">
+          <MousePointerClick className="w-3.5 h-3.5 text-indigo-600" />
+          CLICKED
+        </span>
+      );
+    }
+    if (status === "opened") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-cyan-50 text-[#00c8e8] border border-cyan-200 shadow-2xs">
+          <Eye className="w-3.5 h-3.5 text-[#00c8e8]" />
+          OPENED
         </span>
       );
     }
@@ -426,9 +805,17 @@ export default function EmailDashboardPage() {
     }
     if (status === "delivered") {
       return (
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-cyan-50 text-[#00c8e8] border border-cyan-200">
-          <CheckCircle2 className="w-3.5 h-3.5 text-[#00c8e8]" />
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
           DELIVERED
+        </span>
+      );
+    }
+    if (status === "bounced") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+          BOUNCED
         </span>
       );
     }
@@ -439,10 +826,23 @@ export default function EmailDashboardPage() {
     );
   };
 
-  // Stats computation
+  // Real-time Brevo Stats computation
   const totalCampaignsCount = campaigns.length;
-  const totalOpensCount = campaigns.reduce((acc, curr) => acc + (curr.opens || 0), 0);
-  const totalClicksCount = campaigns.reduce((acc, curr) => acc + (curr.clicks || 0), 0);
+  const totalOpensCount = realtimeData?.globalStats?.totalOpens ?? campaigns.reduce((acc, curr) => acc + (curr.opens || 0), 0);
+  const totalClicksCount = realtimeData?.globalStats?.totalClicks ?? campaigns.reduce((acc, curr) => acc + (curr.clicks || 0), 0);
+
+  if (isAuthenticated === null || !isAuthenticated) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-[#f8fafc]">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-[#1a6fd4] animate-spin" />
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+            Loading Hexacore Email Studio...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-[#f8fafc] text-[#1e293b] antialiased font-sans">
@@ -518,6 +918,28 @@ export default function EmailDashboardPage() {
               strokeWidth={activeView === "compose" ? 2.5 : 2} 
             />
             {!isSidebarCollapsed && <span className="truncate">SEND CAMPAIGN</span>}
+          </button>
+
+          {/* 1b. BULK DISPATCH (CSV) */}
+          <button
+            onClick={() => {
+              setActiveView("bulk");
+              setIsMobileMenuOpen(false);
+            }}
+            title="BULK EMAIL (CSV)"
+            className={`w-full flex items-center ${
+              isSidebarCollapsed ? "justify-center px-2 py-3.5" : "gap-3 px-4 py-3.5"
+            } rounded-2xl transition-all font-bold text-xs uppercase tracking-widest text-left cursor-pointer ${
+              activeView === "bulk"
+                ? "bg-[#0d1f4a] text-white shadow-lg shadow-[#0d1f4a]/25 border border-[#1a6fd4]/30"
+                : "text-slate-600 hover:bg-slate-100/80 hover:text-[#1a6fd4]"
+            }`}
+          >
+            <FileSpreadsheet 
+              className={`w-5 h-5 shrink-0 ${activeView === "bulk" ? "text-[#00c8e8]" : "text-slate-400"}`} 
+              strokeWidth={activeView === "bulk" ? 2.5 : 2} 
+            />
+            {!isSidebarCollapsed && <span className="truncate">BULK EMAIL</span>}
           </button>
 
           {/* 2. INBOX */}
@@ -615,10 +1037,39 @@ export default function EmailDashboardPage() {
           </div>
 
           {/* Centered Header Tagline */}
-          <div className="hidden sm:flex absolute inset-0 items-center justify-center pointer-events-none px-6">
-            <span className="text-lg sm:text-xl lg:text-2xl font-bold text-[#0d1f4a] tracking-tight text-center pointer-events-auto">
+          <div className="hidden lg:flex absolute inset-0 items-center justify-center pointer-events-none px-6">
+            <span className="text-base xl:text-lg font-bold text-[#0d1f4a] tracking-tight text-center pointer-events-auto">
               The #1 composable Open Finance Platform
             </span>
+          </div>
+
+          {/* Right: User Profile & Sign Out Action */}
+          <div className="flex items-center gap-3 relative z-10 shrink-0">
+            {currentUser && (
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200/80">
+                <div className="w-6 h-6 rounded-lg bg-[#0d1f4a] text-white flex items-center justify-center font-bold text-xs uppercase">
+                  {currentUser.name?.[0] || "U"}
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-bold text-[#0d1f4a] leading-none truncate max-w-[130px]">
+                    {currentUser.name}
+                  </p>
+                  <p className="text-[10px] text-slate-400 leading-none truncate max-w-[130px] mt-0.5">
+                    {currentUser.email}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-600 hover:text-rose-600 text-xs font-bold transition-all shadow-xs cursor-pointer"
+              title="Sign Out of Email Studio"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sign Out</span>
+            </button>
           </div>
         </header>
 
@@ -627,6 +1078,8 @@ export default function EmailDashboardPage() {
           <h2 className="text-[#1a6fd4] font-semibold text-sm sm:text-base">
             {activeView === "compose" 
               ? "Emailing" 
+              : activeView === "bulk"
+              ? "Bulk Emailing & CSV Dispatch"
               : activeView === "history" 
               ? "Campaign History" 
               : "Inbox & Inbound Messages"}
@@ -798,9 +1251,40 @@ export default function EmailDashboardPage() {
                             <span>Individual Recipient</span>
                           </div>
                         </SelectItem>
+                        <SelectItem value="csv">
+                          <div className="flex items-center gap-2.5">
+                            <FileSpreadsheet className="w-4 h-4 text-emerald-500 shrink-0" />
+                            <span>Upload CSV List (Bulk Email)</span>
+                          </div>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {/* CONDITIONAL FIELD: CSV Bulk Helper */}
+                  {audience === "csv" && (
+                    <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-200">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
+                          <FileSpreadsheet className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-emerald-950">Bulk Email Mode Selected</p>
+                          <p className="text-xs text-emerald-700 mt-0.5">
+                            Upload CSV files, map dynamic variables, and send high-speed batches in the Bulk Studio.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveView("bulk")}
+                        className="flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-xs transition-all shrink-0 cursor-pointer"
+                      >
+                        <span>Open Bulk Studio</span>
+                        <ArrowUpRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
 
                   {/* CONDITIONAL FIELD: Individual Recipient */}
                   {audience === "individual" && (
@@ -945,13 +1429,29 @@ export default function EmailDashboardPage() {
           )}
 
           {/* ========================================================= */}
+          {/* VIEW 1b: BULK DISPATCH (CSV)                              */}
+          {/* ========================================================= */}
+          {activeView === "bulk" && (
+            <BulkEmailStudio
+              onCampaignSent={(newCamp) => {
+                setCampaigns((prev) => [newCamp, ...prev]);
+              }}
+              onViewChange={(v) => setActiveView(v)}
+              onOpenPreview={(html) => {
+                setModalPreviewHtml(html);
+                setPreviewModalOpen(true);
+              }}
+            />
+          )}
+
+          {/* ========================================================= */}
           {/* VIEW 2: HISTORY & RESPONSES                               */}
           {/* ========================================================= */}
           {activeView === "history" && (
             <div className="bg-white rounded-xl shadow-xs border border-[#e2e8f0] overflow-hidden">
               
               {/* Header */}
-              <div className="p-6 sm:p-7 border-b border-slate-100 flex items-center justify-between">
+              <div className="p-6 sm:p-7 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h3 className="text-xl sm:text-2xl font-bold text-[#0d1f4a] tracking-tight">
                     Email Campaigns
@@ -961,13 +1461,27 @@ export default function EmailDashboardPage() {
                   </p>
                 </div>
 
-                <button
-                  onClick={() => setActiveView("compose")}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-[#00c8e8] to-[#1a6fd4] hover:opacity-95 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-md shadow-[#1a6fd4]/20"
-                >
-                  <Mail className="w-3.5 h-3.5" />
-                  New Campaign
-                </button>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={syncRealtimeData}
+                    disabled={isSyncingRealtime}
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 active:scale-95 text-slate-700 text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-60"
+                    title="Refresh latest email statistics"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 text-[#1a6fd4] ${isSyncingRealtime ? "animate-spin" : ""}`} />
+                    <span>{isSyncingRealtime ? "Refreshing..." : "Refresh"}</span>
+                    {lastSyncedAt && <span className="text-[10px] text-slate-400 font-normal hidden lg:inline">({lastSyncedAt})</span>}
+                  </button>
+
+                  <button
+                    onClick={() => setActiveView("compose")}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-[#00c8e8] to-[#1a6fd4] hover:opacity-95 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-md shadow-[#1a6fd4]/20 cursor-pointer"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    New Campaign
+                  </button>
+                </div>
               </div>
 
               <div className="p-6 sm:p-8 space-y-8">
@@ -1042,24 +1556,29 @@ export default function EmailDashboardPage() {
                           </td>
                         </tr>
                       ) : (
-                        campaigns.map((campaign) => (
-                          <tr key={campaign.id} className="hover:bg-slate-50/70 transition-colors group">
+                        campaigns.map((campaign) => {
+                          const resolvedRecipients = resolveCampaignRecipients(campaign);
+                          const recipientCount = resolvedRecipients.length;
+
+                          return (
+                          <tr 
+                            key={campaign.id} 
+                            onClick={() => handleOpenCampaignDetails(campaign)}
+                            className="hover:bg-slate-50/90 transition-colors group cursor-pointer"
+                          >
                             
                             {/* Campaign Subject & Date */}
                             <td className="py-4 px-6">
-                              <div 
-                                onClick={() => {
-                                  if (campaign.content) {
-                                    setModalPreviewHtml(campaign.content);
-                                    setPreviewModalOpen(true);
-                                  }
-                                }}
-                                className="font-bold text-[#0d1f4a] text-sm hover:text-[#1a6fd4] cursor-pointer transition-colors line-clamp-1"
-                              >
-                                {campaign.subject}
+                              <div className="font-bold text-[#0d1f4a] text-sm group-hover:text-[#1a6fd4] transition-colors line-clamp-1 flex items-center gap-2">
+                                <span>{campaign.subject}</span>
                               </div>
-                              <div className="text-xs text-slate-400 mt-1">
-                                {campaign.created_at}
+                              <div className="text-xs text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
+                                <span>{campaign.created_at}</span>
+                                <span>•</span>
+                                <span className="inline-flex items-center gap-1 font-semibold text-[#1a6fd4] bg-blue-50/80 px-2 py-0.5 rounded-md text-[11px] border border-blue-100">
+                                  <Users className="w-3 h-3" />
+                                  <span>{recipientCount} recipient{recipientCount === 1 ? "" : "s"}</span>
+                                </span>
                               </div>
                             </td>
 
@@ -1085,19 +1604,31 @@ export default function EmailDashboardPage() {
                               </div>
                             </td>
 
-                            {/* Delete Action (Red Trash Icon) */}
-                            <td className="py-4 px-4 text-right">
-                              <button
-                                onClick={() => handleDeleteCampaign(campaign.id)}
-                                title="Delete campaign"
-                                className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                            {/* Actions: View Details + Delete */}
+                            <td className="py-4 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenCampaignDetails(campaign)}
+                                  title="View campaign recipients and details"
+                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-[#1a6fd4] text-slate-600 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                                >
+                                  <Users className="w-3.5 h-3.5 text-[#1a6fd4]" />
+                                  <span className="hidden sm:inline">Details</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteCampaign(campaign.id)}
+                                  title="Delete campaign"
+                                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </td>
 
                           </tr>
-                        ))
+                        );})
                       )}
                     </tbody>
                   </table>
@@ -1549,6 +2080,402 @@ export default function EmailDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* ========================================================= */}
+      {/* MODAL: Campaign Details & Recipients View                 */}
+      {/* ========================================================= */}
+      {campaignDetailsOpen && selectedCampaign && (() => {
+        const recipientsList = resolveCampaignRecipients(selectedCampaign);
+        const filteredRecipients = recipientsList.filter((r) => {
+          if (!recipientSearchQuery.trim()) return true;
+          const q = recipientSearchQuery.toLowerCase();
+          return (
+            r.email.toLowerCase().includes(q) ||
+            (r.name && r.name.toLowerCase().includes(q)) ||
+            (r.metadata && Object.values(r.metadata).some((v) => String(v).toLowerCase().includes(q)))
+          );
+        });
+
+        const handleCopyAllEmails = () => {
+          const allEmails = recipientsList.map((r) => r.email).join(", ");
+          navigator.clipboard.writeText(allEmails);
+          setCopiedAllEmails(true);
+          setTimeout(() => setCopiedAllEmails(false), 2000);
+        };
+
+        const handleCopySingleEmail = (email: string) => {
+          navigator.clipboard.writeText(email);
+          setCopiedEmail(email);
+          setTimeout(() => setCopiedEmail(null), 2000);
+        };
+
+        // Clean HTML without internal metadata comment
+        const cleanPreviewHtml = selectedCampaign.content
+          ? selectedCampaign.content.replace(/<!-- HEXACORE_RECIPIENTS: [\s\S]*? -->\n?/, "")
+          : "<div style='padding:24px; font-family:sans-serif;'>No email HTML content saved for this campaign.</div>";
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200/80 animate-in fade-in zoom-in-95 duration-200">
+              
+              {/* MODAL HEADER */}
+              <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between bg-slate-50/70 gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-100/70 text-[#1a6fd4]">
+                      <MailCheck className="w-3.5 h-3.5" />
+                      <span>Campaign Details</span>
+                    </span>
+                    {renderStatusBadge(selectedCampaign.status)}
+                    <span className="text-xs text-slate-400 font-medium">
+                      {selectedCampaign.created_at}
+                    </span>
+                  </div>
+                  <h3 className="font-extrabold text-lg sm:text-xl text-[#0d1f4a] tracking-tight leading-snug break-words">
+                    {selectedCampaign.subject}
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+                    <span className="font-semibold text-slate-700">Audience:</span>
+                    <span>{selectedCampaign.audience}</span>
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setCampaignDetailsOpen(false)}
+                  className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-200/60 transition-colors shrink-0 cursor-pointer"
+                  title="Close Details"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* 4 SUMMARY STAT CARDS */}
+              {(() => {
+                const deliveredCount = recipientsList.filter((r) => r.status !== "bounced" && r.status !== "failed").length;
+                const calculatedDeliveryRate = recipientsList.length > 0 ? Math.round((deliveredCount / recipientsList.length) * 100) : 100;
+
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-5 sm:p-6 bg-white border-b border-slate-100 shrink-0">
+                    <div className="p-3.5 rounded-2xl bg-blue-50/60 border border-blue-100/80">
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        <Users className="w-3.5 h-3.5 text-[#1a6fd4]" />
+                        <span>Recipients</span>
+                      </div>
+                      <p className="text-xl sm:text-2xl font-black text-[#0d1f4a] mt-1">
+                        {recipientsList.length}
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-emerald-50/60 border border-emerald-100/80">
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Delivery</span>
+                      </div>
+                      <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-1">
+                        {calculatedDeliveryRate}%
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-cyan-50/60 border border-cyan-100/80">
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        <Eye className="w-3.5 h-3.5 text-[#00c8e8]" />
+                        <span>Opens</span>
+                      </div>
+                      <p className="text-xl sm:text-2xl font-black text-[#0d1f4a] mt-1">
+                        {selectedCampaign.opens || 0}
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-100/80">
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        <BarChart3 className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Clicks</span>
+                      </div>
+                      <p className="text-xl sm:text-2xl font-black text-[#0d1f4a] mt-1">
+                        {selectedCampaign.clicks || 0}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* TABS NAVIGATION */}
+              <div className="px-6 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2 -mb-px">
+                  <button
+                    type="button"
+                    onClick={() => setCampaignModalTab("recipients")}
+                    className={`flex items-center gap-2 px-4 py-3 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer ${
+                      campaignModalTab === "recipients"
+                        ? "border-[#1a6fd4] text-[#1a6fd4] bg-white rounded-t-xl shadow-2xs"
+                        : "border-transparent text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    <Users className="w-4 h-4" />
+                    <span>Users Sent To ({recipientsList.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCampaignModalTab("preview")}
+                    className={`flex items-center gap-2 px-4 py-3 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer ${
+                      campaignModalTab === "preview"
+                        ? "border-[#1a6fd4] text-[#1a6fd4] bg-white rounded-t-xl shadow-2xs"
+                        : "border-transparent text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    <Monitor className="w-4 h-4" />
+                    <span>Email Content Preview</span>
+                  </button>
+                </div>
+
+                {campaignModalTab === "preview" && (
+                  <div className="hidden sm:flex items-center p-1 bg-slate-200/70 rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewViewport("desktop")}
+                      className={`p-1 rounded text-xs transition-colors ${
+                        previewViewport === "desktop" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500"
+                      }`}
+                      title="Desktop view"
+                    >
+                      <Monitor className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewViewport("mobile")}
+                      className={`p-1 rounded text-xs transition-colors ${
+                        previewViewport === "mobile" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500"
+                      }`}
+                      title="Mobile view"
+                    >
+                      <Smartphone className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* TAB CONTENT */}
+              <div className="flex-1 overflow-y-auto p-6 bg-slate-50/40">
+                {campaignModalTab === "recipients" ? (
+                  <div className="space-y-4">
+                    
+                    {/* SEARCH & COPY TOOLBAR */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                      <div className="relative flex-1 max-w-md">
+                        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          placeholder="Search recipients by name, email, or company..."
+                          value={recipientSearchQuery}
+                          onChange={(e) => setRecipientSearchQuery(e.target.value)}
+                          className="w-full pl-10 pr-4 py-2 bg-white rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-[#1a6fd4]/20 focus:border-[#1a6fd4] outline-none transition-all shadow-2xs"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleCopyAllEmails}
+                        className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-2xs cursor-pointer shrink-0"
+                      >
+                        {copiedAllEmails ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="text-emerald-700">Copied All Emails!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Copy All ({recipientsList.length}) Emails</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* RECIPIENTS LIST TABLE */}
+                    <div className="border border-slate-200/90 rounded-2xl bg-white overflow-hidden shadow-2xs">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-100 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                              <th className="py-3 px-4">RECIPIENT USER</th>
+                              <th className="py-3 px-4">STATUS</th>
+                              <th className="py-3 px-4">TIMESTAMP</th>
+                              <th className="py-3 px-4">ATTRIBUTES / METADATA</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-xs">
+                            {filteredRecipients.length === 0 ? (
+                              <tr>
+                                <td colSpan={4} className="py-12 text-center text-slate-400">
+                                  {recipientSearchQuery.trim() ? (
+                                    <span>No recipients match your search &quot;{recipientSearchQuery}&quot;.</span>
+                                  ) : (
+                                    <div className="flex flex-col items-center justify-center gap-2 py-4">
+                                      <Activity className="w-7 h-7 text-slate-300 animate-pulse" />
+                                      <p className="font-semibold text-slate-700 text-sm">No recipient events recorded yet</p>
+                                      <p className="text-xs text-slate-400 max-w-sm">
+                                        Delivery, open, and click events will appear here in real time as recipients interact with this campaign.
+                                      </p>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredRecipients.map((rec, idx) => {
+                                const initials = rec.name
+                                  ? rec.name.split(" ").map((n) => n[0]).join("").substring(0, 2).toUpperCase()
+                                  : rec.email.substring(0, 2).toUpperCase();
+
+                                return (
+                                  <tr key={`${rec.email}-${idx}`} className="hover:bg-slate-50/70 transition-colors">
+                                    {/* User Name & Email */}
+                                    <td className="py-3.5 px-4">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0d1f4a] to-[#1a6fd4] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                                          {initials}
+                                        </div>
+                                        <div>
+                                          <p className="font-bold text-slate-900 leading-tight">
+                                            {rec.name || "Recipient User"}
+                                          </p>
+                                          <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className="text-slate-500 font-mono text-[11px]">
+                                              {rec.email}
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleCopySingleEmail(rec.email)}
+                                              title="Copy email address"
+                                              className="text-slate-400 hover:text-[#1a6fd4] transition-colors p-0.5 cursor-pointer"
+                                            >
+                                              {copiedEmail === rec.email ? (
+                                                <Check className="w-3 h-3 text-emerald-600" />
+                                              ) : (
+                                                <Copy className="w-3 h-3" />
+                                              )}
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    {/* Status Badge */}
+                                    <td className="py-3.5 px-4 whitespace-nowrap">
+                                      {rec.status === "clicked" ? (
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs">
+                                          <MousePointerClick className="w-3 h-3 text-indigo-600" />
+                                          <span>Clicked {rec.clicksCount ? `(${rec.clicksCount}x)` : ""}</span>
+                                        </span>
+                                      ) : rec.status === "opened" ? (
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-cyan-50 text-[#00c8e8] border border-cyan-200 shadow-2xs">
+                                          <Eye className="w-3 h-3 text-[#00c8e8]" />
+                                          <span>Opened {rec.opensCount ? `(${rec.opensCount}x)` : ""}</span>
+                                        </span>
+                                      ) : rec.status === "bounced" ? (
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs">
+                                          <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                                          <span>Bounced</span>
+                                        </span>
+                                      ) : rec.status === "delivered" ? (
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                          <span>Delivered</span>
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#1a6fd4] border border-blue-200">
+                                          <Send className="w-3 h-3 text-[#1a6fd4]" />
+                                          <span>Sent</span>
+                                        </span>
+                                      )}
+                                    </td>
+
+                                    {/* Timestamp */}
+                                    <td className="py-3.5 px-4 text-slate-500 whitespace-nowrap font-medium">
+                                      {rec.deliveredAt || selectedCampaign.created_at || "Just now"}
+                                    </td>
+
+                                    {/* Metadata / Tags */}
+                                    <td className="py-3.5 px-4">
+                                      {rec.metadata && Object.keys(rec.metadata).length > 0 ? (
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          {Object.entries(rec.metadata).map(([k, v]) => (
+                                            <span
+                                              key={k}
+                                              className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium text-[11px] border border-slate-200/60"
+                                            >
+                                              <strong className="mr-1 text-slate-500">{k}:</strong> {String(v)}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-slate-400 text-xs font-mono">—</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* TAB 2: EMAIL PREVIEW */
+                  <div className="flex flex-col items-center justify-center p-2">
+                    <div
+                      className={`transition-all duration-300 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden ${
+                        previewViewport === "desktop"
+                          ? "w-full max-w-[660px] h-[580px]"
+                          : "w-[375px] h-[580px] ring-8 ring-slate-800 rounded-[32px]"
+                      }`}
+                    >
+                      <iframe
+                        title="Modal Campaign Details Email Preview"
+                        srcDoc={cleanPreviewHtml.includes("<html") ? cleanPreviewHtml : `<div style="font-family: sans-serif; padding: 24px; color: #0d1f4a; line-height: 1.6;">${cleanPreviewHtml}</div>`}
+                        className="w-full h-full border-none bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* MODAL FOOTER */}
+              <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between bg-white shrink-0">
+                <span className="text-xs text-slate-500 font-medium">
+                  Showing {filteredRecipients.length} of {recipientsList.length} recipient user{recipientsList.length === 1 ? "" : "s"}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCampaignDetailsOpen(false);
+                      setSubject(`Follow-up: ${selectedCampaign.subject}`);
+                      if (selectedCampaign.content) {
+                        setMessageContent(cleanPreviewHtml);
+                      }
+                      setActiveView("compose");
+                    }}
+                    className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer"
+                  >
+                    Resend / Follow-Up
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCampaignDetailsOpen(false)}
+                    className="px-4 py-2 bg-[#0d1f4a] hover:bg-[#152a62] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#0d1f4a]/20 cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

@@ -27,7 +27,7 @@ export async function GET() {
       .order("created_at", { ascending: false });
 
     if (!error && data) {
-      const messages: InboxMessage[] = data.map((d) => ({
+      const messages: InboxMessage[] = data.map((d: any) => ({
         id: d.id,
         fromName: d.from_name || d.from_email.split("@")[0],
         fromEmail: d.from_email,

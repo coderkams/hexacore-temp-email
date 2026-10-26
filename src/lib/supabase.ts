@@ -1,14 +1,11 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient as createBrowserClient } from "./supabase/client";
 
 const DEFAULT_SUPABASE_URL = "https://poggfmbfvdvobsbsdiqs.supabase.co";
 const DEFAULT_SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvZ2dmbWJmdmR2b2JzYnNkaXFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3ODkxODYsImV4cCI6MjA5OTM2NTE4Nn0.RqXCTCXc-0d_Pl0fwD-vlMBYcU9IroQGPGrV2oSTQd4";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL;
-const supabaseAnonKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey || DEFAULT_SUPABASE_ANON_KEY);
+export const supabase = createBrowserClient();
+export { createBrowserClient as createClient };
 
 export interface DbCampaign {
   id: string;
@@ -18,6 +15,13 @@ export interface DbCampaign {
   opens?: number;
   clicks?: number;
   content?: string;
+  recipients?: Array<{
+    email: string;
+    name?: string;
+    status?: string;
+    deliveredAt?: string;
+    metadata?: Record<string, string>;
+  }> | string;
   created_at?: string;
 }
 
@@ -52,7 +56,26 @@ export async function getCampaignsFromDb(): Promise<DbCampaign[] | null> {
       console.warn("Supabase fetch campaigns error (table may not exist yet):", error.message);
       return null;
     }
-    return data as DbCampaign[];
+
+    const rows: DbCampaign[] = (data || []).map((row: any) => {
+      let recipients = row.recipients;
+      if (!recipients && row.content) {
+        const match = row.content.match(/<!-- HEXACORE_RECIPIENTS: ([\s\S]*?) -->/);
+        if (match) {
+          try {
+            recipients = JSON.parse(match[1]);
+          } catch {
+            // ignore
+          }
+        }
+      }
+      return {
+        ...row,
+        recipients,
+      };
+    });
+
+    return rows;
   } catch (err) {
     console.warn("Supabase client error:", err);
     return null;
@@ -69,6 +92,16 @@ export async function saveCampaignToDb(campaign: DbCampaign): Promise<boolean> {
       .insert([campaign]);
 
     if (error) {
+      // If error code is 42703 (column does not exist), fallback to embedding in content
+      if (error.code === "42703" && campaign.recipients) {
+        const { recipients, ...rest } = campaign;
+        const serialized = typeof recipients === "string" ? recipients : JSON.stringify(recipients);
+        const embeddedContent = `<!-- HEXACORE_RECIPIENTS: ${serialized} -->\n${rest.content || ""}`;
+        const retry = await supabase.from("campaigns").insert([{ ...rest, content: embeddedContent }]);
+        if (!retry.error) {
+          return true;
+        }
+      }
       console.warn("Supabase save campaign error:", error.message);
       return false;
     }

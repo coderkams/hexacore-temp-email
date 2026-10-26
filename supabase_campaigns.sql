@@ -13,8 +13,12 @@ CREATE TABLE IF NOT EXISTS public.campaigns (
   opens INTEGER DEFAULT 0,
   clicks INTEGER DEFAULT 0,
   content TEXT,
+  recipients JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
+
+-- Ensure column exists if table was created previously
+ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS recipients JSONB DEFAULT '[]'::jsonb;
 
 -- 2. Enable Row Level Security (RLS)
 ALTER TABLE public.campaigns ENABLE ROW LEVEL SECURITY;

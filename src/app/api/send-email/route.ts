@@ -31,6 +31,15 @@ export async function POST(req: NextRequest) {
     // Persist campaign log into Supabase backend
     try {
       const { saveCampaignToDb } = await import("@/lib/supabase");
+      const recipientList = [
+        {
+          email: body.toEmail,
+          name: body.toName || body.toEmail.split("@")[0],
+          status: result.mode === "live" ? "delivered" : "sent",
+          deliveredAt: new Date().toISOString(),
+          metadata: body.params || {},
+        },
+      ];
       await saveCampaignToDb({
         id: `camp-${Date.now()}`,
         subject: body.subject || "Hexacore Notification",
@@ -39,6 +48,7 @@ export async function POST(req: NextRequest) {
         opens: 0,
         clicks: 0,
         content: body.htmlContent || "",
+        recipients: recipientList,
         created_at: new Date().toISOString(),
       });
     } catch (dbErr) {

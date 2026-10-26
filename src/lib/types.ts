@@ -35,3 +35,75 @@ export interface SendEmailResult {
   error?: string;
   details?: unknown;
 }
+
+export interface BulkRecipient {
+  email: string;
+  name?: string;
+  params?: Record<string, string>;
+}
+
+export interface CsvParseResult {
+  recipients: BulkRecipient[];
+  invalidRows: Array<{
+    rowNumber: number;
+    data: Record<string, string>;
+    reason: string;
+  }>;
+  duplicates: string[];
+  totalRows: number;
+  validCount: number;
+  headers: string[];
+  detectedColumns: {
+    emailCol?: string;
+    nameCol?: string;
+    customCols: string[];
+  };
+}
+
+export interface BulkEmailPayload {
+  recipients?: BulkRecipient[];
+  csvContent?: string;
+  subject: string;
+  templateId?: TemplateType | "blank";
+  params?: Record<string, string>;
+  htmlContent?: string;
+  audienceLabel?: string;
+  batchSize?: number;
+  dryRun?: boolean;
+  deduplicate?: boolean;
+}
+
+export interface BulkBatchResult {
+  batchIndex: number;
+  recipientCount: number;
+  success: boolean;
+  messageId?: string;
+  error?: string;
+}
+
+export interface BulkEmailResult {
+  success: boolean;
+  mode: 'live' | 'simulation';
+  totalRecipients: number;
+  sentCount: number;
+  failedCount: number;
+  batchCount: number;
+  invalidSkipped: number;
+  campaignId?: string;
+  results: BulkBatchResult[];
+  errors?: string[];
+  previewOnly?: boolean;
+  recipients?: CampaignRecipient[];
+}
+
+export interface CampaignRecipient {
+  email: string;
+  name?: string;
+  status?: "delivered" | "sent" | "failed" | "opened" | "clicked" | "bounced";
+  deliveredAt?: string;
+  opensCount?: number;
+  clicksCount?: number;
+  bounceReason?: string;
+  metadata?: Record<string, string>;
+}
+
