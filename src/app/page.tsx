@@ -29,6 +29,7 @@ import {
   Copy, 
   Check, 
   Clock, 
+  ArrowLeft,
   ArrowUpRight, 
   BarChart3, 
   Trash2, 
@@ -55,7 +56,6 @@ import {
   RefreshCw,
   CheckCheck,
   MailOpen,
-  Info,
   FileSpreadsheet,
   UploadCloud,
   LogOut,
@@ -455,7 +455,6 @@ export default function EmailDashboardPage() {
   const [selectedInboxMessage, setSelectedInboxMessage] = useState<InboxMessage | null>(null);
   const [inboxFilter, setInboxFilter] = useState<"all" | "unread" | "starred">("all");
   const [inboxSearch, setInboxSearch] = useState<string>("");
-  const [inboundGuideModalOpen, setInboundGuideModalOpen] = useState<boolean>(false);
   const [isRefreshingInbox, setIsRefreshingInbox] = useState<boolean>(false);
 
   // Fetch campaigns from Supabase backend on mount, then synchronize Brevo telemetry
@@ -853,7 +852,7 @@ export default function EmailDashboardPage() {
       <aside 
         className={`fixed md:sticky top-0 left-0 z-50 h-[100dvh] bg-white border-r border-[#e2e8f0] flex flex-col py-6 transition-all duration-300 ease-in-out shrink-0 relative ${
           isMobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0"
-        } ${isSidebarCollapsed ? "w-20" : "w-64 lg:w-72"}`}
+        } ${isSidebarCollapsed ? "w-20" : "w-64 lg:w-72 max-w-[85vw]"}`}
       >
         {/* Edge Collapse Trigger (shadcn component mounted on the sidebar border edge) */}
         <SidebarEdgeTrigger
@@ -1011,27 +1010,29 @@ export default function EmailDashboardPage() {
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         
         {/* TOP NAVIGATION HEADER */}
-        <header className="bg-white border-b border-slate-200/80 px-6 py-3.5 flex justify-between items-center sticky top-0 z-30 shadow-xs relative">
+        <header className="bg-white border-b border-slate-200/80 px-3 sm:px-6 py-2.5 sm:py-3.5 flex justify-between items-center sticky top-0 z-30 shadow-xs relative">
           
           {/* Left: Mobile hamburger & Search Bar */}
-          <div className="flex items-center gap-3 sm:gap-4 relative z-10">
+          <div className="flex items-center gap-2 sm:gap-4 relative z-10">
             {/* Mobile Hamburger */}
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className="md:hidden p-1.5 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-100"
+              className="md:hidden p-2 -ml-1 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-100 transition-colors"
+              title="Open Navigation"
+              aria-label="Open Navigation"
             >
               <Menu className="w-5 h-5" />
             </button>
 
             {/* Search Input */}
             <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Search className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 pr-4 py-2 bg-slate-100 hover:bg-slate-100/90 focus:bg-white rounded-md outline-none focus:ring-2 focus:ring-[#1a6fd4]/20 focus:border-[#1a6fd4] transition-all text-sm w-48 sm:w-64 border border-transparent"
+                className="pl-7 sm:pl-9 pr-2.5 sm:pr-4 py-1.5 sm:py-2 bg-slate-100 hover:bg-slate-100/90 focus:bg-white rounded-lg sm:rounded-md outline-none focus:ring-2 focus:ring-[#1a6fd4]/20 focus:border-[#1a6fd4] transition-all text-xs sm:text-sm w-28 xs:w-44 sm:w-64 border border-transparent"
               />
             </div>
           </div>
@@ -1044,38 +1045,47 @@ export default function EmailDashboardPage() {
           </div>
 
           {/* Right: User Profile & Sign Out Action */}
-          <div className="flex items-center gap-3 relative z-10 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 relative z-10 shrink-0">
             {currentUser && (
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200/80">
-                <div className="w-6 h-6 rounded-lg bg-[#0d1f4a] text-white flex items-center justify-center font-bold text-xs uppercase">
+              <>
+                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200/80">
+                  <div className="w-6 h-6 rounded-lg bg-[#0d1f4a] text-white flex items-center justify-center font-bold text-xs uppercase">
+                    {currentUser.name?.[0] || "U"}
+                  </div>
+                  <div className="text-left">
+                    <p className="text-xs font-bold text-[#0d1f4a] leading-none truncate max-w-[130px]">
+                      {currentUser.name}
+                    </p>
+                    <p className="text-[10px] text-slate-400 leading-none truncate max-w-[130px] mt-0.5">
+                      {currentUser.email}
+                    </p>
+                  </div>
+                </div>
+
+                <div 
+                  className="sm:hidden w-7 h-7 rounded-lg bg-[#0d1f4a] text-white flex items-center justify-center font-bold text-xs uppercase shadow-xs shrink-0" 
+                  title={`${currentUser.name} (${currentUser.email})`}
+                >
                   {currentUser.name?.[0] || "U"}
                 </div>
-                <div className="text-left">
-                  <p className="text-xs font-bold text-[#0d1f4a] leading-none truncate max-w-[130px]">
-                    {currentUser.name}
-                  </p>
-                  <p className="text-[10px] text-slate-400 leading-none truncate max-w-[130px] mt-0.5">
-                    {currentUser.email}
-                  </p>
-                </div>
-              </div>
+              </>
             )}
 
             <button
               type="button"
               onClick={handleSignOut}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-600 hover:text-rose-600 text-xs font-bold transition-all shadow-xs cursor-pointer"
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-600 hover:text-rose-600 text-xs font-bold transition-all shadow-xs cursor-pointer"
               title="Sign Out of Email Studio"
             >
               <LogOut className="w-3.5 h-3.5" />
-              <span>Sign Out</span>
+              <span className="hidden xs:inline">Sign Out</span>
             </button>
           </div>
         </header>
 
         {/* SUBHEADER BAR (Hexacore Blue/Cyan Soft Tint) */}
-        <div className="bg-[#f8fafc] px-6 lg:px-8 py-3 flex justify-between items-center border-b border-[#e2e8f0]">
-          <h2 className="text-[#1a6fd4] font-semibold text-sm sm:text-base">
+        <div className="bg-[#f8fafc] px-3.5 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex justify-between items-center border-b border-[#e2e8f0]">
+          <h2 className="text-[#1a6fd4] font-semibold text-xs sm:text-base">
             {activeView === "compose" 
               ? "Emailing" 
               : activeView === "bulk"
@@ -1087,7 +1097,7 @@ export default function EmailDashboardPage() {
         </div>
 
         {/* MAIN BODY CONTAINER */}
-        <main className="p-6 lg:p-8 max-w-7xl w-full mx-auto">
+        <main className="p-3 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
           
           {/* ========================================================= */}
           {/* VIEW 1: SEND CAMPAIGN                                     */}
@@ -1096,12 +1106,12 @@ export default function EmailDashboardPage() {
             <div className="bg-white rounded-xl shadow-xs border border-[#e2e8f0] overflow-hidden">
               
               {/* Card Header */}
-              <div className="p-6 sm:p-7 border-b border-slate-100 flex items-center justify-between">
+              <div className="p-4 sm:p-7 border-b border-slate-100 flex items-center justify-between">
                 <div>
                   <h3 className="text-xl sm:text-2xl font-bold text-[#0d1f4a] tracking-tight">
                     Email Campaigns
                   </h3>
-                  <p className="text-slate-500 text-sm mt-1">
+                  <p className="text-slate-500 text-xs sm:text-sm mt-0.5 sm:mt-1">
                     Send promotional bulk emails and view responses.
                   </p>
                 </div>
@@ -1109,15 +1119,15 @@ export default function EmailDashboardPage() {
                 {/* Secondary link to history */}
                 <button
                   onClick={() => setActiveView("history")}
-                  className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-[#1a6fd4] hover:text-[#155cb4] transition-colors"
+                  className="flex items-center gap-1 sm:gap-1.5 text-xs font-bold text-[#1a6fd4] hover:text-[#155cb4] transition-colors"
                 >
-                  <History className="w-4 h-4" />
-                  View History ({campaigns.length})
+                  <History className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="hidden xs:inline">View History</span> ({campaigns.length})
                 </button>
               </div>
 
               {/* Form Content */}
-              <div className="p-6 sm:p-8">
+              <div className="p-4 sm:p-8">
                 <form onSubmit={handleSendCampaign} className="space-y-6 max-w-4xl">
                   
                   {/* FIELD 1: QUICK TEMPLATES (shadcn/ui Select with Lucide icons) */}
@@ -1339,24 +1349,24 @@ export default function EmailDashboardPage() {
                   </div>
 
                   {/* ACTION BAR: PREVIEW / COPY / SEND */}
-                  <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-2">
+                  <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
                       <button
                         type="button"
                         onClick={() => {
                           setModalPreviewHtml(messageContent);
                           setPreviewModalOpen(true);
                         }}
-                        className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-blue-50/60 hover:border-blue-200 text-slate-700 hover:text-[#1a6fd4] text-xs font-bold transition-all shadow-xs"
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-blue-50/60 hover:border-blue-200 text-slate-700 hover:text-[#1a6fd4] text-xs font-bold transition-all shadow-xs cursor-pointer"
                       >
                         <Eye className="w-4 h-4 text-[#1a6fd4]" />
-                        Preview Email
+                        <span>Preview Email</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={handleCopyHtml}
-                        className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-xs"
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-xs cursor-pointer"
                       >
                         {copiedHtml ? (
                           <>
@@ -1375,7 +1385,7 @@ export default function EmailDashboardPage() {
                     <button
                       type="submit"
                       disabled={isSending}
-                      className="flex items-center justify-center gap-2 px-8 py-3.5 bg-gradient-to-r from-[#00c8e8] to-[#1a6fd4] hover:opacity-95 active:scale-95 text-white rounded-xl font-bold uppercase tracking-widest text-xs transition-all shadow-lg shadow-[#1a6fd4]/25 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                      className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 bg-gradient-to-r from-[#00c8e8] to-[#1a6fd4] hover:opacity-95 active:scale-95 text-white rounded-xl font-bold uppercase tracking-widest text-xs transition-all shadow-lg shadow-[#1a6fd4]/25 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer text-center"
                     >
                       {isSending ? (
                         <>
@@ -1451,22 +1461,22 @@ export default function EmailDashboardPage() {
             <div className="bg-white rounded-xl shadow-xs border border-[#e2e8f0] overflow-hidden">
               
               {/* Header */}
-              <div className="p-6 sm:p-7 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="p-4 sm:p-7 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 <div>
                   <h3 className="text-xl sm:text-2xl font-bold text-[#0d1f4a] tracking-tight">
                     Email Campaigns
                   </h3>
-                  <p className="text-slate-500 text-sm mt-1">
+                  <p className="text-slate-500 text-xs sm:text-sm mt-0.5 sm:mt-1">
                     Send promotional bulk emails and view responses.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2.5 flex-wrap">
+                <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap w-full sm:w-auto">
                   <button
                     type="button"
                     onClick={syncRealtimeData}
                     disabled={isSyncingRealtime}
-                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 active:scale-95 text-slate-700 text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-60"
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 active:scale-95 text-slate-700 text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-60"
                     title="Refresh latest email statistics"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 text-[#1a6fd4] ${isSyncingRealtime ? "animate-spin" : ""}`} />
@@ -1476,59 +1486,59 @@ export default function EmailDashboardPage() {
 
                   <button
                     onClick={() => setActiveView("compose")}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-[#00c8e8] to-[#1a6fd4] hover:opacity-95 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-md shadow-[#1a6fd4]/20 cursor-pointer"
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 bg-gradient-to-r from-[#00c8e8] to-[#1a6fd4] hover:opacity-95 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-md shadow-[#1a6fd4]/20 cursor-pointer text-center"
                   >
                     <Mail className="w-3.5 h-3.5" />
-                    New Campaign
+                    <span>New Campaign</span>
                   </button>
                 </div>
               </div>
 
-              <div className="p-6 sm:p-8 space-y-8">
+              <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
                 
                 {/* 3 QUICK STATS CARDS (Hexacore Blue / Cyan Palettes) */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                   
                   {/* Card 1: Total Campaigns */}
-                  <div className="p-5 rounded-2xl border border-slate-200/90 bg-[#f8fafc] flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#1a6fd4] shrink-0">
+                  <div className="p-4 sm:p-5 rounded-2xl border border-slate-200/90 bg-[#f8fafc] flex items-center gap-3.5 sm:gap-4">
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#1a6fd4] shrink-0">
                       <Mail className="w-5 h-5 text-[#1a6fd4]" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      <p className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
                         TOTAL CAMPAIGNS
                       </p>
-                      <p className="text-2xl font-black text-[#0d1f4a] mt-0.5">
+                      <p className="text-xl sm:text-2xl font-black text-[#0d1f4a] mt-0.5">
                         {totalCampaignsCount}
                       </p>
                     </div>
                   </div>
 
                   {/* Card 2: Total Opens */}
-                  <div className="p-5 rounded-2xl border border-slate-200/90 bg-[#f8fafc] flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-cyan-50 border border-cyan-100 flex items-center justify-center text-[#00c8e8] shrink-0">
+                  <div className="p-4 sm:p-5 rounded-2xl border border-slate-200/90 bg-[#f8fafc] flex items-center gap-3.5 sm:gap-4">
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-cyan-50 border border-cyan-100 flex items-center justify-center text-[#00c8e8] shrink-0">
                       <ArrowUpRight className="w-5 h-5 text-[#00c8e8]" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      <p className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
                         TOTAL OPENS
                       </p>
-                      <p className="text-2xl font-black text-[#0d1f4a] mt-0.5">
+                      <p className="text-xl sm:text-2xl font-black text-[#0d1f4a] mt-0.5">
                         {totalOpensCount}
                       </p>
                     </div>
                   </div>
 
                   {/* Card 3: Total Clicks */}
-                  <div className="p-5 rounded-2xl border border-slate-200/90 bg-[#f8fafc] flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#1a6fd4] shrink-0">
+                  <div className="p-4 sm:p-5 rounded-2xl border border-slate-200/90 bg-[#f8fafc] flex items-center gap-3.5 sm:gap-4">
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#1a6fd4] shrink-0">
                       <BarChart3 className="w-5 h-5 text-[#1a6fd4]" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      <p className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
                         TOTAL CLICKS
                       </p>
-                      <p className="text-2xl font-black text-[#0d1f4a] mt-0.5">
+                      <p className="text-xl sm:text-2xl font-black text-[#0d1f4a] mt-0.5">
                         {totalClicksCount}
                       </p>
                     </div>
@@ -1536,8 +1546,86 @@ export default function EmailDashboardPage() {
 
                 </div>
 
-                {/* TABLE OF CAMPAIGNS */}
-                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                {/* MOBILE VIEW: Campaign Cards (md:hidden) */}
+                <div className="md:hidden space-y-3">
+                  {campaigns.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 text-sm bg-slate-50/50 rounded-xl border border-slate-200">
+                      No email campaigns found in history.
+                    </div>
+                  ) : (
+                    campaigns.map((campaign) => {
+                      const resolvedRecipients = resolveCampaignRecipients(campaign);
+                      const recipientCount = resolvedRecipients.length;
+
+                      return (
+                        <div
+                          key={`mobile-${campaign.id}`}
+                          onClick={() => handleOpenCampaignDetails(campaign)}
+                          className="p-4 rounded-xl border border-slate-200 bg-white hover:border-[#1a6fd4]/40 active:bg-slate-50/80 transition-all shadow-2xs space-y-3 cursor-pointer"
+                        >
+                          {/* Top Row: Subject & Delete Button */}
+                          <div className="flex items-start justify-between gap-2">
+                            <h4 className="font-bold text-[#0d1f4a] text-sm leading-snug line-clamp-2">
+                              {campaign.subject}
+                            </h4>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteCampaign(campaign.id);
+                              }}
+                              title="Delete campaign"
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer shrink-0 -mt-0.5 -mr-1"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          {/* Subline: Status + Date */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {renderStatusBadge(campaign.status)}
+                            <span className="text-xs text-slate-400 font-medium">
+                              {campaign.created_at}
+                            </span>
+                            <span>•</span>
+                            <span className="text-xs text-slate-500 font-medium truncate max-w-[150px]">
+                              {campaign.audience}
+                            </span>
+                          </div>
+
+                          {/* Mini Stat Summary Box */}
+                          <div className="grid grid-cols-3 gap-2 p-2.5 rounded-lg bg-slate-50/80 border border-slate-200/60 text-center">
+                            <div>
+                              <p className="text-[10px] uppercase font-bold text-slate-400">Recipients</p>
+                              <p className="text-xs font-black text-slate-800 mt-0.5">{recipientCount}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase font-bold text-slate-400">Opens</p>
+                              <p className="text-xs font-black text-[#00c8e8] mt-0.5">{campaign.opens || 0}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase font-bold text-slate-400">Clicks</p>
+                              <p className="text-xs font-black text-[#1a6fd4] mt-0.5">{campaign.clicks || 0}</p>
+                            </div>
+                          </div>
+
+                          {/* Action Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenCampaignDetails(campaign)}
+                            className="w-full py-2 px-3 rounded-lg bg-blue-50/70 hover:bg-blue-100/70 text-[#1a6fd4] font-bold text-xs flex items-center justify-center gap-1.5 border border-blue-100 transition-colors"
+                          >
+                            <Users className="w-3.5 h-3.5" />
+                            <span>View Campaign Details ({recipientCount})</span>
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* DESKTOP VIEW: TABLE OF CAMPAIGNS (hidden md:block) */}
+                <div className="hidden md:block overflow-x-auto border border-slate-200 rounded-xl">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -1645,7 +1733,7 @@ export default function EmailDashboardPage() {
             <div className="bg-white rounded-xl shadow-xs border border-[#e2e8f0] overflow-hidden flex flex-col">
               
               {/* Header */}
-              <div className="p-6 sm:p-7 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="p-4 sm:p-7 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 <div>
                   <div className="flex items-center gap-2.5">
                     <h3 className="text-xl sm:text-2xl font-bold text-[#0d1f4a] tracking-tight">
@@ -1657,33 +1745,25 @@ export default function EmailDashboardPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-slate-500 text-sm mt-1">
-                    Incoming recipient replies and parsed messages via Brevo inbound webhook.
+                  <p className="text-slate-500 text-xs sm:text-sm mt-0.5 sm:mt-1">
+                    Incoming recipient replies
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => setInboundGuideModalOpen(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 hover:border-blue-300 text-slate-700 hover:text-[#1a6fd4] hover:bg-blue-50/50 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                  >
-                    <Info className="w-3.5 h-3.5 text-[#1a6fd4]" />
-                    Inbound Webhook Setup
-                  </button>
-
+                <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
                   <button
                     onClick={handleSimulateInboundReply}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
                   >
                     <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    Simulate Reply
+                    <span>Simulate Reply</span>
                   </button>
 
                   <button
                     onClick={fetchInbox}
                     disabled={isRefreshingInbox}
                     title="Refresh Inbox"
-                    className="p-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl transition-all disabled:opacity-50 cursor-pointer"
+                    className="p-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl transition-all disabled:opacity-50 cursor-pointer shrink-0"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingInbox ? "animate-spin text-[#1a6fd4]" : ""}`} />
                   </button>
@@ -1691,11 +1771,11 @@ export default function EmailDashboardPage() {
               </div>
 
               {/* Filter Tabs & Search Bar */}
-              <div className="px-6 py-3 border-b border-slate-100 bg-[#f8fafc] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-1">
+              <div className="px-3.5 sm:px-6 py-2.5 sm:py-3 border-b border-slate-100 bg-[#f8fafc] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
                   <button
                     onClick={() => setInboxFilter("all")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
                       inboxFilter === "all"
                         ? "bg-[#0d1f4a] text-white shadow-xs"
                         : "text-slate-600 hover:bg-slate-200/60"
@@ -1706,7 +1786,7 @@ export default function EmailDashboardPage() {
 
                   <button
                     onClick={() => setInboxFilter("unread")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                       inboxFilter === "unread"
                         ? "bg-[#0d1f4a] text-white shadow-xs"
                         : "text-slate-600 hover:bg-slate-200/60"
@@ -1722,7 +1802,7 @@ export default function EmailDashboardPage() {
 
                   <button
                     onClick={() => setInboxFilter("starred")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                       inboxFilter === "starred"
                         ? "bg-[#0d1f4a] text-white shadow-xs"
                         : "text-slate-600 hover:bg-slate-200/60"
@@ -1734,7 +1814,7 @@ export default function EmailDashboardPage() {
                 </div>
 
                 {/* Search within inbox */}
-                <div className="relative">
+                <div className="relative w-full sm:w-auto">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                   <input
                     type="text"
@@ -1771,17 +1851,17 @@ export default function EmailDashboardPage() {
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-12 min-h-[560px]">
+                <div className="grid grid-cols-1 lg:grid-cols-12 min-h-[520px]">
                   
-                  {/* Left Column: Message List (5 cols on lg) */}
-                  <div className="lg:col-span-5 border-r border-slate-100 overflow-y-auto max-h-[680px] divide-y divide-slate-100">
+                  {/* Left Column: Message List (5 cols on lg, hidden on mobile if message selected) */}
+                  <div className={`${selectedInboxMessage ? "hidden lg:block" : "block"} lg:col-span-5 border-r border-slate-100 overflow-y-auto max-h-[680px] divide-y divide-slate-100`}>
                     {filteredInboxMessages.map((msg) => {
                       const isSelected = selectedInboxMessage?.id === msg.id;
                       return (
                         <div
                           key={msg.id}
                           onClick={() => handleSelectInboxMessage(msg)}
-                          className={`p-4 cursor-pointer transition-colors relative flex items-start gap-3 ${
+                          className={`p-3.5 sm:p-4 cursor-pointer transition-colors relative flex items-start gap-3 ${
                             isSelected
                               ? "bg-blue-50/70 border-l-4 border-l-[#1a6fd4]"
                               : msg.isUnread
@@ -1833,20 +1913,31 @@ export default function EmailDashboardPage() {
                     })}
                   </div>
 
-                  {/* Right Column: Message Reader (7 cols on lg) */}
-                  <div className="lg:col-span-7 flex flex-col bg-[#fdfdfd]">
+                  {/* Right Column: Message Reader (7 cols on lg, shown on mobile only if message selected) */}
+                  <div className={`${selectedInboxMessage ? "flex" : "hidden lg:flex"} lg:col-span-7 flex-col bg-[#fdfdfd]`}>
                     {selectedInboxMessage ? (
                       <div className="flex-1 flex flex-col">
                         
                         {/* Message Reader Action Header */}
-                        <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-white">
+                        <div className="p-3.5 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-white flex-wrap gap-2">
                           <div className="flex items-center gap-2">
+                            {/* Mobile Back Button */}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedInboxMessage(null)}
+                              className="lg:hidden flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer mr-1"
+                              title="Back to inbox messages"
+                            >
+                              <ArrowLeft className="w-3.5 h-3.5" />
+                              <span>Back</span>
+                            </button>
+
                             <button
                               onClick={() => handleReplyToMessage(selectedInboxMessage)}
                               className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0d1f4a] hover:bg-[#1a6fd4] text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
                             >
                               <Reply className="w-3.5 h-3.5" />
-                              Reply
+                              <span>Reply</span>
                             </button>
 
                             <button
@@ -1882,52 +1973,52 @@ export default function EmailDashboardPage() {
                         </div>
 
                         {/* Message Metadata Header */}
-                        <div className="p-6 bg-white border-b border-slate-100">
-                          <h2 className="text-lg font-bold text-[#0d1f4a] mb-3">
+                        <div className="p-4 sm:p-6 bg-white border-b border-slate-100">
+                          <h2 className="text-base sm:text-lg font-bold text-[#0d1f4a] mb-2 sm:mb-3">
                             {selectedInboxMessage.subject}
                           </h2>
 
-                          <div className="flex items-center justify-between text-xs text-slate-600">
-                            <div className="flex items-center gap-2.5">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-600 gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
                               <div className="w-8 h-8 rounded-full bg-blue-100 text-[#1a6fd4] font-bold flex items-center justify-center shrink-0">
                                 {selectedInboxMessage.fromName.charAt(0).toUpperCase()}
                               </div>
-                              <div>
-                                <p className="font-bold text-slate-800">
+                              <div className="min-w-0">
+                                <p className="font-bold text-slate-800 truncate">
                                   {selectedInboxMessage.fromName}{" "}
-                                  <span className="font-normal text-slate-500">&lt;{selectedInboxMessage.fromEmail}&gt;</span>
+                                  <span className="font-normal text-slate-500 font-mono text-[11px]">&lt;{selectedInboxMessage.fromEmail}&gt;</span>
                                 </p>
-                                <p className="text-[11px] text-slate-400">
+                                <p className="text-[11px] text-slate-400 truncate">
                                   To: {selectedInboxMessage.toEmail}
                                 </p>
                               </div>
                             </div>
 
-                            <span className="text-slate-400 font-medium">
+                            <span className="text-slate-400 font-medium text-[11px] sm:text-xs">
                               {selectedInboxMessage.date}
                             </span>
                           </div>
                         </div>
 
                         {/* Message Body Content */}
-                        <div className="p-6 flex-1 overflow-y-auto bg-white">
+                        <div className="p-4 sm:p-6 flex-1 overflow-y-auto bg-white">
                           <div 
-                            className="prose prose-sm max-w-none text-slate-800 leading-relaxed"
+                            className="prose prose-sm max-w-none text-slate-800 leading-relaxed text-xs sm:text-sm"
                             dangerouslySetInnerHTML={{ __html: selectedInboxMessage.bodyHtml || selectedInboxMessage.preview }}
                           />
                         </div>
 
                         {/* Quick Reply Footer Bar */}
-                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                          <span className="text-xs text-slate-500">
+                        <div className="p-3.5 sm:p-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                          <span className="text-[11px] sm:text-xs text-slate-500 text-center sm:text-left">
                             Replying switches to Compose view with recipient pre-filled.
                           </span>
                           <button
                             onClick={() => handleReplyToMessage(selectedInboxMessage)}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-[#00c8e8] to-[#1a6fd4] hover:opacity-95 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-md shadow-[#1a6fd4]/20 cursor-pointer"
+                            className="flex items-center justify-center gap-1.5 px-4 py-2 bg-gradient-to-r from-[#00c8e8] to-[#1a6fd4] hover:opacity-95 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-md shadow-[#1a6fd4]/20 cursor-pointer text-center"
                           >
                             <Reply className="w-3.5 h-3.5" />
-                            Compose Reply
+                            <span>Compose Reply</span>
                           </button>
                         </div>
 
@@ -1949,86 +2040,23 @@ export default function EmailDashboardPage() {
         </main>
       </div>
 
-      {/* ========================================================= */}
-      {/* MODAL: Brevo Inbound Webhook Setup Guide                  */}
-      {/* ========================================================= */}
-      {inboundGuideModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
-              <div className="flex items-center gap-2">
-                <Info className="w-4 h-4 text-[#1a6fd4]" />
-                <h3 className="font-bold text-sm text-[#0d1f4a]">Brevo Inbound Email Webhook Setup</h3>
-              </div>
-              <button
-                onClick={() => setInboundGuideModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="p-6 overflow-y-auto space-y-5 text-xs text-slate-600 leading-relaxed">
-              <p>
-                To automatically receive recipient replies and incoming customer emails directly inside this dashboard:
-              </p>
-
-              <div className="p-4 bg-blue-50/60 rounded-xl border border-blue-200 space-y-2">
-                <span className="font-bold text-[#0d1f4a] block uppercase text-[11px] tracking-wider">
-                  Your Webhook Target Endpoint URL:
-                </span>
-                <code className="block p-2.5 bg-white border border-blue-200 rounded-lg font-mono text-[11px] text-[#1a6fd4] select-all break-all">
-                  {typeof window !== "undefined" ? window.location.origin : "https://yourdomain.com"}/api/webhooks/brevo-inbound
-                </code>
-              </div>
-
-              <div className="space-y-3">
-                <h4 className="font-bold text-[#0d1f4a] text-sm">3 Quick Steps in Brevo &amp; Cloudflare:</h4>
-                <ol className="list-decimal list-inside space-y-2 pl-1">
-                  <li>
-                    <strong>In Brevo:</strong> Go to <em>Settings &gt; Inbound Email &gt; Webhooks</em>. Click <em>Add Webhook</em> and paste the endpoint URL above.
-                  </li>
-                  <li>
-                    <strong>In Cloudflare DNS:</strong> Add an <code>MX</code> record for your inbound subdomain (e.g., <code>reply.yourdomain.com</code>) pointing to Brevo’s inbound mail server (<code>inbound.brevo.com</code>) with Priority <code>10</code>.
-                  </li>
-                  <li>
-                    <strong>In Compose View:</strong> Send emails with your <code>Reply-To</code> header set to your inbound domain (e.g. <code>reply@reply.yourdomain.com</code>). When recipients reply, they will appear in your Inbox!
-                  </li>
-                </ol>
-              </div>
-
-              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px]">
-                <strong>Testing immediately?</strong> Click the <strong>Simulate Reply</strong> button on the Inbox toolbar to test the UI experience without waiting for DNS propagation.
-              </div>
-            </div>
-
-            <div className="px-6 py-3 border-t border-slate-100 flex justify-end bg-slate-50/50">
-              <button
-                onClick={() => setInboundGuideModalOpen(false)}
-                className="px-4 py-2 bg-[#0d1f4a] text-white text-xs font-bold rounded-lg hover:bg-[#091228] transition-colors cursor-pointer"
-              >
-                Got It
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ========================================================= */}
       {/* MODAL: Full Screen Email Preview                          */}
       {/* ========================================================= */}
       {previewModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
               <div className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-[#1a6fd4]" />
-                <h3 className="font-bold text-sm text-[#0d1f4a]">Email Campaign Preview</h3>
+                <h3 className="font-bold text-xs sm:text-sm text-[#0d1f4a]">Email Campaign Preview</h3>
               </div>
 
               <div className="flex items-center gap-2">
                 {/* Viewport switcher */}
-                <div className="flex items-center p-1 bg-slate-200/70 rounded-lg mr-2">
+                <div className="flex items-center p-1 bg-slate-200/70 rounded-lg mr-1 sm:mr-2">
                   <button
                     onClick={() => setPreviewViewport("desktop")}
                     className={`p-1 rounded text-xs transition-colors ${
@@ -2049,16 +2077,16 @@ export default function EmailDashboardPage() {
 
                 <button
                   onClick={() => setPreviewModalOpen(false)}
-                  className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+                  className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            <div className="flex-1 p-6 overflow-y-auto bg-slate-100 flex items-center justify-center">
+            <div className="flex-1 p-2.5 sm:p-6 overflow-y-auto bg-slate-100 flex items-center justify-center">
               <div className={`transition-all duration-300 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden ${
-                previewViewport === "desktop" ? "w-full max-w-[620px] h-[580px]" : "w-[375px] h-[580px] ring-8 ring-slate-800 rounded-[28px]"
+                previewViewport === "desktop" ? "w-full max-w-[620px] h-[360px] xs:h-[460px] sm:h-[580px]" : "w-full max-w-[375px] h-[360px] xs:h-[460px] sm:h-[580px] ring-4 sm:ring-8 ring-slate-800 rounded-2xl sm:rounded-[28px]"
               }`}>
                 <iframe
                   title="Modal Email Preview"
@@ -2068,11 +2096,11 @@ export default function EmailDashboardPage() {
               </div>
             </div>
 
-            <div className="px-6 py-3 border-t border-slate-100 flex items-center justify-between bg-white">
-              <span className="text-xs text-slate-500 font-mono">Rendered cross-client compatible HTML</span>
+            <div className="px-4 sm:px-6 py-3 border-t border-slate-100 flex items-center justify-between bg-white">
+              <span className="text-[11px] sm:text-xs text-slate-500 font-mono">Cross-client HTML</span>
               <button
                 onClick={() => setPreviewModalOpen(false)}
-                className="px-4 py-2 bg-[#0d1f4a] text-white text-xs font-bold rounded-lg hover:bg-[#091228] transition-colors"
+                className="px-4 py-1.5 sm:py-2 bg-[#0d1f4a] text-white text-xs font-bold rounded-lg hover:bg-[#091228] transition-colors"
               >
                 Close Preview
               </button>
@@ -2114,36 +2142,77 @@ export default function EmailDashboardPage() {
           ? selectedCampaign.content.replace(/<!-- HEXACORE_RECIPIENTS: [\s\S]*? -->\n?/, "")
           : "<div style='padding:24px; font-family:sans-serif;'>No email HTML content saved for this campaign.</div>";
 
+        const renderRecipientStatusBadge = (rec: CampaignRecipient) => {
+          if (rec.status === "clicked") {
+            return (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs">
+                <MousePointerClick className="w-3 h-3 text-indigo-600" />
+                <span>Clicked {rec.clicksCount ? `(${rec.clicksCount}x)` : ""}</span>
+              </span>
+            );
+          }
+          if (rec.status === "opened") {
+            return (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-cyan-50 text-[#00c8e8] border border-cyan-200 shadow-2xs">
+                <Eye className="w-3 h-3 text-[#00c8e8]" />
+                <span>Opened {rec.opensCount ? `(${rec.opensCount}x)` : ""}</span>
+              </span>
+            );
+          }
+          if (rec.status === "bounced") {
+            return (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                <span>Bounced</span>
+              </span>
+            );
+          }
+          if (rec.status === "delivered") {
+            return (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                <span>Delivered</span>
+              </span>
+            );
+          }
+          return (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#1a6fd4] border border-blue-200">
+              <Send className="w-3 h-3 text-[#1a6fd4]" />
+              <span>Sent</span>
+            </span>
+          );
+        };
+
         return (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200/80 animate-in fade-in zoom-in-95 duration-200">
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-6 overflow-y-auto">
+            <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-4xl max-h-[96vh] sm:max-h-[92vh] flex flex-col overflow-hidden border border-slate-200/80 animate-in fade-in zoom-in-95 duration-200">
               
               {/* MODAL HEADER */}
-              <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between bg-slate-50/70 gap-4">
+              <div className="px-4 sm:px-6 py-3.5 sm:py-5 border-b border-slate-100 flex items-start justify-between bg-slate-50/70 gap-3 sm:gap-4">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-100/70 text-[#1a6fd4]">
-                      <MailCheck className="w-3.5 h-3.5" />
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap mb-1">
+                    <span className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider bg-blue-100/70 text-[#1a6fd4]">
+                      <MailCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                       <span>Campaign Details</span>
                     </span>
                     {renderStatusBadge(selectedCampaign.status)}
-                    <span className="text-xs text-slate-400 font-medium">
+                    <span className="text-[11px] sm:text-xs text-slate-400 font-medium">
                       {selectedCampaign.created_at}
                     </span>
                   </div>
-                  <h3 className="font-extrabold text-lg sm:text-xl text-[#0d1f4a] tracking-tight leading-snug break-words">
+                  <h3 className="font-extrabold text-base sm:text-xl text-[#0d1f4a] tracking-tight leading-snug break-words">
                     {selectedCampaign.subject}
                   </h3>
-                  <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+                  <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5 truncate">
                     <span className="font-semibold text-slate-700">Audience:</span>
-                    <span>{selectedCampaign.audience}</span>
+                    <span className="truncate">{selectedCampaign.audience}</span>
                   </p>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setCampaignDetailsOpen(false)}
-                  className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-200/60 transition-colors shrink-0 cursor-pointer"
+                  className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-200/60 transition-colors shrink-0 cursor-pointer"
                   title="Close Details"
                 >
                   <X className="w-5 h-5" />
@@ -2156,43 +2225,43 @@ export default function EmailDashboardPage() {
                 const calculatedDeliveryRate = recipientsList.length > 0 ? Math.round((deliveredCount / recipientsList.length) * 100) : 100;
 
                 return (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-5 sm:p-6 bg-white border-b border-slate-100 shrink-0">
-                    <div className="p-3.5 rounded-2xl bg-blue-50/60 border border-blue-100/80">
-                      <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 p-3 sm:p-6 bg-white border-b border-slate-100 shrink-0">
+                    <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-blue-50/60 border border-blue-100/80">
+                      <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
                         <Users className="w-3.5 h-3.5 text-[#1a6fd4]" />
                         <span>Recipients</span>
                       </div>
-                      <p className="text-xl sm:text-2xl font-black text-[#0d1f4a] mt-1">
+                      <p className="text-lg sm:text-2xl font-black text-[#0d1f4a] mt-0.5 sm:mt-1">
                         {recipientsList.length}
                       </p>
                     </div>
 
-                    <div className="p-3.5 rounded-2xl bg-emerald-50/60 border border-emerald-100/80">
-                      <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-emerald-50/60 border border-emerald-100/80">
+                      <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                         <span>Delivery</span>
                       </div>
-                      <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-1">
+                      <p className="text-lg sm:text-2xl font-black text-emerald-900 mt-0.5 sm:mt-1">
                         {calculatedDeliveryRate}%
                       </p>
                     </div>
 
-                    <div className="p-3.5 rounded-2xl bg-cyan-50/60 border border-cyan-100/80">
-                      <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-cyan-50/60 border border-cyan-100/80">
+                      <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
                         <Eye className="w-3.5 h-3.5 text-[#00c8e8]" />
                         <span>Opens</span>
                       </div>
-                      <p className="text-xl sm:text-2xl font-black text-[#0d1f4a] mt-1">
+                      <p className="text-lg sm:text-2xl font-black text-[#0d1f4a] mt-0.5 sm:mt-1">
                         {selectedCampaign.opens || 0}
                       </p>
                     </div>
 
-                    <div className="p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-100/80">
-                      <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-indigo-50/60 border border-indigo-100/80">
+                      <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
                         <BarChart3 className="w-3.5 h-3.5 text-indigo-600" />
                         <span>Clicks</span>
                       </div>
-                      <p className="text-xl sm:text-2xl font-black text-[#0d1f4a] mt-1">
+                      <p className="text-lg sm:text-2xl font-black text-[#0d1f4a] mt-0.5 sm:mt-1">
                         {selectedCampaign.clicks || 0}
                       </p>
                     </div>
@@ -2201,37 +2270,37 @@ export default function EmailDashboardPage() {
               })()}
 
               {/* TABS NAVIGATION */}
-              <div className="px-6 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between shrink-0">
+              <div className="px-3 sm:px-6 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between shrink-0 overflow-x-auto no-scrollbar">
                 <div className="flex items-center gap-2 -mb-px">
                   <button
                     type="button"
                     onClick={() => setCampaignModalTab("recipients")}
-                    className={`flex items-center gap-2 px-4 py-3 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer ${
+                    className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                       campaignModalTab === "recipients"
                         ? "border-[#1a6fd4] text-[#1a6fd4] bg-white rounded-t-xl shadow-2xs"
                         : "border-transparent text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    <Users className="w-4 h-4" />
+                    <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     <span>Users Sent To ({recipientsList.length})</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setCampaignModalTab("preview")}
-                    className={`flex items-center gap-2 px-4 py-3 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer ${
+                    className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                       campaignModalTab === "preview"
                         ? "border-[#1a6fd4] text-[#1a6fd4] bg-white rounded-t-xl shadow-2xs"
                         : "border-transparent text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    <Monitor className="w-4 h-4" />
+                    <Monitor className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     <span>Email Content Preview</span>
                   </button>
                 </div>
 
                 {campaignModalTab === "preview" && (
-                  <div className="hidden sm:flex items-center p-1 bg-slate-200/70 rounded-lg">
+                  <div className="flex items-center p-0.5 sm:p-1 bg-slate-200/70 rounded-lg shrink-0">
                     <button
                       type="button"
                       onClick={() => setPreviewViewport("desktop")}
@@ -2257,17 +2326,17 @@ export default function EmailDashboardPage() {
               </div>
 
               {/* TAB CONTENT */}
-              <div className="flex-1 overflow-y-auto p-6 bg-slate-50/40">
+              <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 bg-slate-50/40">
                 {campaignModalTab === "recipients" ? (
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     
                     {/* SEARCH & COPY TOOLBAR */}
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
                       <div className="relative flex-1 max-w-md">
                         <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                         <input
                           type="text"
-                          placeholder="Search recipients by name, email, or company..."
+                          placeholder="Search recipients by name, email, or metadata..."
                           value={recipientSearchQuery}
                           onChange={(e) => setRecipientSearchQuery(e.target.value)}
                           className="w-full pl-10 pr-4 py-2 bg-white rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-[#1a6fd4]/20 focus:border-[#1a6fd4] outline-none transition-all shadow-2xs"
@@ -2277,7 +2346,7 @@ export default function EmailDashboardPage() {
                       <button
                         type="button"
                         onClick={handleCopyAllEmails}
-                        className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-2xs cursor-pointer shrink-0"
+                        className="flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-2xs cursor-pointer shrink-0"
                       >
                         {copiedAllEmails ? (
                           <>
@@ -2293,8 +2362,95 @@ export default function EmailDashboardPage() {
                       </button>
                     </div>
 
-                    {/* RECIPIENTS LIST TABLE */}
-                    <div className="border border-slate-200/90 rounded-2xl bg-white overflow-hidden shadow-2xs">
+                    {/* MOBILE RECIPIENTS CARDS (sm:hidden) */}
+                    <div className="sm:hidden space-y-2.5">
+                      {filteredRecipients.length === 0 ? (
+                        <div className="p-8 text-center text-slate-400 text-xs bg-white rounded-xl border border-slate-200">
+                          {recipientSearchQuery.trim() ? (
+                            <span>No recipients match &quot;{recipientSearchQuery}&quot;.</span>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center gap-2 py-4">
+                              <Activity className="w-7 h-7 text-slate-300 animate-pulse" />
+                              <p className="font-semibold text-slate-700 text-xs">No recipient events recorded yet</p>
+                              <p className="text-[11px] text-slate-400 max-w-xs">
+                                Delivery, open, and click events will appear here in real time as recipients interact with this campaign.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        filteredRecipients.map((rec, idx) => {
+                          const initials = rec.name
+                            ? rec.name.split(" ").map((n) => n[0]).join("").substring(0, 2).toUpperCase()
+                            : rec.email.substring(0, 2).toUpperCase();
+
+                          return (
+                            <div
+                              key={`mobile-rec-${rec.email}-${idx}`}
+                              className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2.5 shadow-2xs"
+                            >
+                              {/* Row 1: Avatar, Name, Email, Copy & Status */}
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0d1f4a] to-[#1a6fd4] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                                    {initials}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-slate-900 text-xs truncate">
+                                      {rec.name || "Recipient User"}
+                                    </p>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      <span className="text-slate-500 font-mono text-[11px] truncate max-w-[140px] xs:max-w-[180px]">
+                                        {rec.email}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCopySingleEmail(rec.email)}
+                                        title="Copy email address"
+                                        className="text-slate-400 hover:text-[#1a6fd4] transition-colors p-0.5 cursor-pointer shrink-0"
+                                      >
+                                        {copiedEmail === rec.email ? (
+                                          <Check className="w-3 h-3 text-emerald-600" />
+                                        ) : (
+                                          <Copy className="w-3 h-3" />
+                                        )}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="shrink-0">
+                                  {renderRecipientStatusBadge(rec)}
+                                </div>
+                              </div>
+
+                              {/* Row 2: Timestamp */}
+                              <div className="flex items-center gap-1 text-[11px] text-slate-400 pt-1 border-t border-slate-100 font-medium">
+                                <Clock className="w-3 h-3 text-slate-400" />
+                                <span>{rec.deliveredAt || selectedCampaign.created_at || "Just now"}</span>
+                              </div>
+
+                              {/* Row 3: Metadata attributes (if any) */}
+                              {rec.metadata && Object.keys(rec.metadata).length > 0 && (
+                                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                  {Object.entries(rec.metadata).map(([k, v]) => (
+                                    <span
+                                      key={k}
+                                      className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-medium text-[10px] border border-slate-200/60"
+                                    >
+                                      <strong className="mr-1 text-slate-500">{k}:</strong> {String(v)}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* DESKTOP RECIPIENTS TABLE (hidden sm:block) */}
+                    <div className="hidden sm:block border border-slate-200/90 rounded-2xl bg-white overflow-hidden shadow-2xs">
                       <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                           <thead>
@@ -2363,32 +2519,7 @@ export default function EmailDashboardPage() {
 
                                     {/* Status Badge */}
                                     <td className="py-3.5 px-4 whitespace-nowrap">
-                                      {rec.status === "clicked" ? (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs">
-                                          <MousePointerClick className="w-3 h-3 text-indigo-600" />
-                                          <span>Clicked {rec.clicksCount ? `(${rec.clicksCount}x)` : ""}</span>
-                                        </span>
-                                      ) : rec.status === "opened" ? (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-cyan-50 text-[#00c8e8] border border-cyan-200 shadow-2xs">
-                                          <Eye className="w-3 h-3 text-[#00c8e8]" />
-                                          <span>Opened {rec.opensCount ? `(${rec.opensCount}x)` : ""}</span>
-                                        </span>
-                                      ) : rec.status === "bounced" ? (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs">
-                                          <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                                          <span>Bounced</span>
-                                        </span>
-                                      ) : rec.status === "delivered" ? (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
-                                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                                          <span>Delivered</span>
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#1a6fd4] border border-blue-200">
-                                          <Send className="w-3 h-3 text-[#1a6fd4]" />
-                                          <span>Sent</span>
-                                        </span>
-                                      )}
+                                      {renderRecipientStatusBadge(rec)}
                                     </td>
 
                                     {/* Timestamp */}
@@ -2424,12 +2555,12 @@ export default function EmailDashboardPage() {
                   </div>
                 ) : (
                   /* TAB 2: EMAIL PREVIEW */
-                  <div className="flex flex-col items-center justify-center p-2">
+                  <div className="flex flex-col items-center justify-center p-1 sm:p-2">
                     <div
                       className={`transition-all duration-300 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden ${
                         previewViewport === "desktop"
-                          ? "w-full max-w-[660px] h-[580px]"
-                          : "w-[375px] h-[580px] ring-8 ring-slate-800 rounded-[32px]"
+                          ? "w-full max-w-[660px] h-[360px] xs:h-[460px] sm:h-[580px]"
+                          : "w-full max-w-[375px] h-[360px] xs:h-[460px] sm:h-[580px] ring-4 sm:ring-8 ring-slate-800 rounded-2xl sm:rounded-[32px]"
                       }`}
                     >
                       <iframe
@@ -2443,11 +2574,11 @@ export default function EmailDashboardPage() {
               </div>
 
               {/* MODAL FOOTER */}
-              <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between bg-white shrink-0">
-                <span className="text-xs text-slate-500 font-medium">
+              <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between bg-white shrink-0 gap-3">
+                <span className="text-xs text-slate-500 font-medium text-center sm:text-left">
                   Showing {filteredRecipients.length} of {recipientsList.length} recipient user{recipientsList.length === 1 ? "" : "s"}
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
                   <button
                     type="button"
                     onClick={() => {
@@ -2458,14 +2589,14 @@ export default function EmailDashboardPage() {
                       }
                       setActiveView("compose");
                     }}
-                    className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer"
+                    className="flex-1 sm:flex-none px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer text-center"
                   >
                     Resend / Follow-Up
                   </button>
                   <button
                     type="button"
                     onClick={() => setCampaignDetailsOpen(false)}
-                    className="px-4 py-2 bg-[#0d1f4a] hover:bg-[#152a62] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#0d1f4a]/20 cursor-pointer"
+                    className="flex-1 sm:flex-none px-4 py-2 bg-[#0d1f4a] hover:bg-[#152a62] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#0d1f4a]/20 cursor-pointer text-center"
                   >
                     Close
                   </button>

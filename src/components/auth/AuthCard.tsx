@@ -236,7 +236,7 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 sm:p-6 bg-[#f8fafc] relative overflow-hidden">
+    <div className="min-h-screen w-full flex items-center justify-center p-3.5 sm:p-6 bg-[#f8fafc] relative overflow-hidden">
       {/* Technical Blueprint Grid Pattern matching screenshots */}
       <div 
         className="absolute inset-0 pointer-events-none opacity-60"
@@ -254,7 +254,7 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
       <div className="absolute w-[500px] h-[500px] bg-cyan-100/30 rounded-full blur-3xl pointer-events-none -bottom-24 -right-24" />
 
       {/* MAIN AUTH CARD */}
-      <div className="w-full max-w-[440px] bg-white rounded-[32px] p-8 sm:p-10 shadow-xl shadow-slate-200/60 border border-slate-100 relative z-10 animate-in fade-in zoom-in-95 duration-300">
+      <div className="w-full max-w-[440px] bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-10 shadow-xl shadow-slate-200/60 border border-slate-100 relative z-10 animate-in fade-in zoom-in-95 duration-300">
         
         {/* LOGO */}
         <div className="flex justify-center mb-6">
@@ -277,7 +277,7 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
 
         {/* HEADINGS */}
         <div className="text-center mb-8">
-          <h1 className="text-2xl sm:text-[28px] font-black text-[#0d1f4a] tracking-tight">
+          <h1 className="text-xl sm:text-[28px] font-black text-[#0d1f4a] tracking-tight">
             {mode === "signin" 
               ? "Welcome Back" 
               : mode === "signup" 

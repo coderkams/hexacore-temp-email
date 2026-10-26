@@ -55,7 +55,7 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 sm:p-6 bg-[#f8fafc] relative overflow-hidden">
+    <div className="min-h-screen w-full flex items-center justify-center p-3.5 sm:p-6 bg-[#f8fafc] relative overflow-hidden">
       {/* Blueprint Grid Background */}
       <div
         className="absolute inset-0 pointer-events-none opacity-60"
@@ -68,7 +68,7 @@ export default function ResetPasswordPage() {
         }}
       />
 
-      <div className="w-full max-w-[440px] bg-white rounded-[32px] p-8 sm:p-10 shadow-xl shadow-slate-200/60 border border-slate-100 relative z-10 animate-in fade-in zoom-in-95 duration-300">
+      <div className="w-full max-w-[440px] bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-10 shadow-xl shadow-slate-200/60 border border-slate-100 relative z-10 animate-in fade-in zoom-in-95 duration-300">
         {/* LOGO */}
         <div className="flex justify-center mb-6">
           <Link href="/" className="inline-block transition-transform hover:scale-105">
@@ -90,7 +90,7 @@ export default function ResetPasswordPage() {
 
         {/* HEADINGS */}
         <div className="text-center mb-8">
-          <h1 className="text-2xl sm:text-[28px] font-black text-[#0d1f4a] tracking-tight">
+          <h1 className="text-xl sm:text-[28px] font-black text-[#0d1f4a] tracking-tight">
             Set New Password
           </h1>
           <p className="text-slate-500 text-xs sm:text-sm mt-1.5 leading-relaxed">
