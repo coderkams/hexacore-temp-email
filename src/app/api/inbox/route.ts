@@ -1,23 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { inMemoryInbox, addInboxMessage, removeInboxMessage, InboxMessage } from "@/lib/inbox-store";
 
 export const dynamic = "force-dynamic";
-
-export interface InboxMessage {
-  id: string;
-  fromName: string;
-  fromEmail: string;
-  toEmail: string;
-  subject: string;
-  date: string;
-  preview: string;
-  bodyHtml: string;
-  isUnread: boolean;
-  isStarred?: boolean;
-}
-
-// In-memory fallback cache in case Supabase inbound table is not provisioned yet
-let inMemoryInbox: InboxMessage[] = [];
 
 export async function GET() {
   try {
@@ -26,10 +11,10 @@ export async function GET() {
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (!error && data) {
+    if (!error && data && data.length > 0) {
       const messages: InboxMessage[] = data.map((d: any) => ({
         id: d.id,
-        fromName: d.from_name || d.from_email.split("@")[0],
+        fromName: d.from_name || (d.from_email ? d.from_email.split("@")[0] : "Sender"),
         fromEmail: d.from_email,
         toEmail: d.to_email || "info@hexacore.ng",
         subject: d.subject || "(No Subject)",
@@ -42,6 +27,7 @@ export async function GET() {
       return NextResponse.json({ success: true, messages, fromDb: true });
     }
 
+    // Fall back to shared in-memory store if DB is empty or table doesn't exist yet
     return NextResponse.json({ success: true, messages: inMemoryInbox, fromDb: false });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to fetch inbox messages";
@@ -65,7 +51,8 @@ export async function POST(req: NextRequest) {
       isStarred: body.isStarred ?? false,
     };
 
-    inMemoryInbox = [newMessage, ...inMemoryInbox];
+    // Store in shared in-memory store
+    addInboxMessage(newMessage);
 
     // Attempt to persist to Supabase if table exists
     try {
@@ -102,7 +89,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ success: false, error: "ID required" }, { status: 400 });
     }
 
-    inMemoryInbox = inMemoryInbox.filter((m) => m.id !== id);
+    removeInboxMessage(id);
 
     try {
       await supabase.from("inbound_emails").delete().eq("id", id);

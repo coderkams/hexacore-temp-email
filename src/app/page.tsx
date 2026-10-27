@@ -484,26 +484,64 @@ export default function EmailDashboardPage() {
   }, [activeView]);
 
   // Fetch inbox messages
-  const fetchInbox = async () => {
-    setIsRefreshingInbox(true);
+  const fetchInbox = async (silent = false) => {
+    if (!silent) setIsRefreshingInbox(true);
     try {
       const res = await fetch("/api/inbox");
       const data = await res.json();
       if (data.success && Array.isArray(data.messages)) {
         setInboxMessages(data.messages);
-        if (data.messages.length > 0 && !selectedInboxMessage) {
-          setSelectedInboxMessage(data.messages[0]);
+        if (data.messages.length > 0) {
+          setSelectedInboxMessage((prev) => {
+            if (!prev) return data.messages[0];
+            const found = data.messages.find((m: any) => m.id === prev.id);
+            return found || data.messages[0];
+          });
         }
       }
     } catch (err) {
       console.warn("Supabase inbox fetch notice:", err);
     } finally {
-      setIsRefreshingInbox(false);
+      if (!silent) setIsRefreshingInbox(false);
     }
   };
 
+  // Initial load
   useEffect(() => {
     fetchInbox();
+  }, []);
+
+  // Auto-refresh when viewing the inbox (polls every 8 seconds)
+  useEffect(() => {
+    if (activeView === "inbox") {
+      fetchInbox(true);
+      const timer = setInterval(() => {
+        fetchInbox(true);
+      }, 8000);
+      return () => clearInterval(timer);
+    }
+  }, [activeView]);
+
+  // Real-time Supabase push updates
+  useEffect(() => {
+    const channel = supabase
+      .channel("realtime-inbound-inbox")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "inbound_emails",
+        },
+        () => {
+          fetchInbox(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const unreadInboxCount = inboxMessages.filter((m) => m.isUnread).length;
@@ -576,7 +614,7 @@ export default function EmailDashboardPage() {
   };
 
   // Simulate test inbound reply
-  const handleSimulateInboundReply = () => {
+  const handleSimulateInboundReply = async () => {
     const testMsg: InboxMessage = {
       id: `msg-${Date.now()}`,
       fromName: "Sarah Jenkins",
@@ -600,6 +638,16 @@ export default function EmailDashboardPage() {
 
     setInboxMessages((prev) => [testMsg, ...prev]);
     setSelectedInboxMessage(testMsg);
+
+    try {
+      await fetch("/api/inbox", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(testMsg),
+      });
+    } catch (err) {
+      console.warn("Failed to persist simulated reply:", err);
+    }
   };
 
   const filteredInboxMessages = inboxMessages.filter((msg) => {
@@ -1751,6 +1799,11 @@ export default function EmailDashboardPage() {
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                  <div className="hidden xs:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200/80 text-[11px] font-bold text-emerald-700">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Live Inbound</span>
+                  </div>
+
                   <button
                     onClick={handleSimulateInboundReply}
                     className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
@@ -1760,7 +1813,7 @@ export default function EmailDashboardPage() {
                   </button>
 
                   <button
-                    onClick={fetchInbox}
+                    onClick={() => fetchInbox(false)}
                     disabled={isRefreshingInbox}
                     title="Refresh Inbox"
                     className="p-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl transition-all disabled:opacity-50 cursor-pointer shrink-0"
