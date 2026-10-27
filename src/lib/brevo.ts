@@ -68,7 +68,7 @@ export async function sendEmailWithBrevo(payload: SendEmailPayload): Promise<Sen
         },
         replyTo: {
           name: config.senderName,
-          email: process.env.BREVO_REPLY_TO || "support@reply.hexacore.ng",
+          email: process.env.BREVO_REPLY_TO || config.senderEmail,
         },
         to: [
           {

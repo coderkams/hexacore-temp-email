@@ -1804,6 +1804,7 @@ export default function EmailDashboardPage() {
                     <span>Live Inbound</span>
                   </div>
 
+                  {/* Simulate Reply button commented out
                   <button
                     onClick={handleSimulateInboundReply}
                     className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
@@ -1811,6 +1812,7 @@ export default function EmailDashboardPage() {
                     <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                     <span>Simulate Reply</span>
                   </button>
+                  */}
 
                   <button
                     onClick={() => fetchInbox(false)}
@@ -1893,6 +1895,7 @@ export default function EmailDashboardPage() {
                       ? `No emails match "${inboxSearch}". Clear the search to view all inbound messages.`
                       : "When recipients reply to your emails or Brevo receives incoming messages via your MX records, they will automatically appear here."}
                   </p>
+                  {/* Send Test Reply to Inbox commented out
                   {!inboxSearch && (
                     <button
                       onClick={handleSimulateInboundReply}
@@ -1902,6 +1905,7 @@ export default function EmailDashboardPage() {
                       Send Test Reply to Inbox
                     </button>
                   )}
+                  */}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-12 min-h-[520px]">
