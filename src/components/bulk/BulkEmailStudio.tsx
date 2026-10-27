@@ -480,7 +480,7 @@ export default function BulkEmailStudio({
       
       {/* FLOATING SUCCESS / ACTION TOAST */}
       {toast && (
-        <div className="fixed bottom-4 sm:bottom-6 left-4 sm:left-auto right-4 sm:right-6 z-50 sm:max-w-md animate-in slide-in-from-bottom-5 duration-300">
+        <div className="fixed bottom-20 md:bottom-6 left-3 right-3 sm:left-auto sm:right-6 z-50 sm:max-w-md animate-in slide-in-from-bottom-5 duration-300">
           <div
             className={`p-4 rounded-2xl shadow-2xl border flex items-start gap-3.5 backdrop-blur-md ${
               toast.type === "success"
@@ -613,15 +613,15 @@ export default function BulkEmailStudio({
       {/* HEADER CARD */}
       <div className="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-4 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
         <div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#0d1f4a] to-[#1a6fd4] flex items-center justify-center text-white shadow-md shadow-[#1a6fd4]/20">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#0d1f4a] to-[#1a6fd4] flex items-center justify-center text-white shadow-md shadow-[#1a6fd4]/20 shrink-0 mt-0.5 sm:mt-0">
               <Users className="w-5 h-5 text-[#00c8e8]" />
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-[#0d1f4a] tracking-tight flex items-center gap-2.5">
                 Bulk Email Dispatcher
               </h1>
-              <p className="text-slate-500 text-xs sm:text-sm mt-0.5">
+              <p className="text-slate-500 text-xs sm:text-sm mt-0.5 leading-relaxed">
                 Upload CSV contact lists, personalize template tags (<code className="text-[#1a6fd4] font-semibold">&#123;&#123;name&#125;&#125;</code>, <code className="text-[#1a6fd4] font-semibold">&#123;&#123;company&#125;&#125;</code>), and dispatch batch campaigns at scale.
               </p>
             </div>
@@ -768,7 +768,7 @@ export default function BulkEmailStudio({
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center ${
+                className={`border-2 border-dashed rounded-2xl p-5 sm:p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center ${
                   isDragging
                     ? "border-[#1a6fd4] bg-blue-50/70 scale-[1.01]"
                     : selectedFile
@@ -965,7 +965,66 @@ export default function BulkEmailStudio({
                   </div>
                 </div>
 
-                <div className="overflow-x-auto max-h-56">
+                {/* MOBILE CARDS VIEW (sm:hidden) */}
+                <div className="sm:hidden divide-y divide-slate-100 max-h-64 overflow-y-auto p-2 space-y-2">
+                  {previewRows.map((row, idx) => (
+                    <div 
+                      key={`preview-card-${idx}`}
+                      className={`p-3 rounded-xl border ${
+                        row.isValid ? "bg-white border-slate-200/90" : "bg-rose-50/60 border-rose-200"
+                      } space-y-1.5`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[10px] font-mono text-slate-400 font-bold">#{row.index}</span>
+                          <span className="font-mono text-xs font-semibold text-slate-800 truncate">
+                            {row.email}
+                          </span>
+                        </div>
+                        <div className="shrink-0">
+                          {row.isValid ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              Ready
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                              <AlertCircle className="w-3 h-3 text-rose-500 shrink-0" />
+                              Invalid
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-slate-600">
+                        <span className="text-slate-700 font-medium truncate">{row.name}</span>
+                        {!row.isValid && row.reason && (
+                          <span className="text-[10px] text-rose-600 truncate max-w-[160px] font-medium">{row.reason}</span>
+                        )}
+                      </div>
+
+                      {/* Custom attributes pills */}
+                      {Object.keys(row.extra || {}).filter(k => !["email", "name"].includes(k.toLowerCase())).length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-1 border-t border-slate-100">
+                          {Object.entries(row.extra || {})
+                            .filter(([k]) => !["email", "name"].includes(k.toLowerCase()))
+                            .slice(0, 3)
+                            .map(([k, v]) => (
+                              <span
+                                key={k}
+                                className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-mono"
+                              >
+                                {k}: {String(v)}
+                              </span>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* DESKTOP TABLE VIEW (hidden sm:block) */}
+                <div className="hidden sm:block overflow-x-auto max-h-56">
                   <table className="w-full text-left text-xs min-w-[500px]">
                     <thead className="bg-slate-100/70 text-slate-600 font-bold uppercase tracking-wider text-[10px] sticky top-0">
                       <tr>
@@ -990,7 +1049,7 @@ export default function BulkEmailStudio({
                                 .filter(([k]) => !["email", "name"].includes(k.toLowerCase()))
                                 .slice(0, 3)
                                 .map(([k, v]) => (
-                                  <span
+                                   <span
                                     key={k}
                                     className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-mono"
                                   >

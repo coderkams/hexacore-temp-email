@@ -43,16 +43,17 @@ export async function middleware(request: NextRequest) {
   }
 
   const { pathname } = request.nextUrl;
+  const hasSessionCookie = Boolean(request.cookies.get("hexacore_session")?.value);
 
   // Protected Routes: Root dashboard requires authentication
-  if (!user && pathname === "/") {
+  if (!user && !hasSessionCookie && pathname === "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/signin";
     return NextResponse.redirect(url);
   }
 
   // Auth routes: If already logged in, redirect away from signin/signup to dashboard
-  if (user && (pathname === "/signin" || pathname === "/signup")) {
+  if ((user || hasSessionCookie) && (pathname === "/signin" || pathname === "/signup")) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);

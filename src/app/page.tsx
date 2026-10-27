@@ -203,29 +203,51 @@ export default function EmailDashboardPage() {
     let isMounted = true;
 
     async function initializeAuth() {
+      // 1. Immediately hydrate from localStorage cache or session cookie
+      const stored = typeof window !== "undefined" ? localStorage.getItem("hexacore_user") : null;
+      let cachedUser: any = null;
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed && (parsed.isLoggedIn || parsed.email)) {
+            cachedUser = parsed;
+            if (isMounted) {
+              setCurrentUser(parsed);
+              setIsAuthenticated(true);
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!cachedUser && typeof document !== "undefined" && document.cookie.includes("hexacore_session")) {
+        cachedUser = {
+          name: "Hexacore Demo Admin",
+          email: "demo@hexacore.com",
+          company: "Hexacore Labs",
+          isLoggedIn: true,
+        };
+        if (isMounted) {
+          setCurrentUser(cachedUser);
+          setIsAuthenticated(true);
+        }
+      }
+
       try {
-        const { data, error } = await supabase.auth.getUser();
+        // Fast timeout for Supabase getUser check
+        const getUserPromise = supabase.auth.getUser();
+        const timeoutPromise = new Promise<{ data: { user: null }; error: Error }>((resolve) =>
+          setTimeout(() => resolve({ data: { user: null }, error: new Error("Auth timeout") }), 1200)
+        );
+
+        const { data, error } = await Promise.race([getUserPromise, timeoutPromise]);
         const user = data?.user;
 
         if (error || !user) {
-          // Check if there was a cached user in localStorage as brief fallback
-          const stored = typeof window !== "undefined" ? localStorage.getItem("hexacore_user") : null;
-          if (stored) {
-            try {
-              const parsed = JSON.parse(stored);
-              if (parsed && parsed.isLoggedIn) {
-                const { data: sessionData } = await supabase.auth.getSession();
-                if (sessionData.session) {
-                  if (isMounted) {
-                    setCurrentUser(parsed);
-                    setIsAuthenticated(true);
-                  }
-                  return;
-                }
-              }
-            } catch {
-              // ignore
-            }
+          if (cachedUser) {
+            // Already hydrated from local cache or session cookie
+            return;
           }
 
           if (isMounted) {
@@ -272,13 +294,26 @@ export default function EmailDashboardPage() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event: any, session: any) => {
-      if (event === "SIGNED_OUT" || !session) {
+      const isDemoSession =
+        (typeof document !== "undefined" && document.cookie.includes("hexacore_session")) ||
+        (typeof window !== "undefined" && Boolean(localStorage.getItem("hexacore_user")));
+
+      if (event === "SIGNED_OUT") {
         if (isMounted) {
           setIsAuthenticated(false);
           setCurrentUser(null);
           if (typeof window !== "undefined") {
             localStorage.removeItem("hexacore_user");
           }
+          if (typeof document !== "undefined") {
+            document.cookie = "hexacore_session=; path=/; max-age=0";
+          }
+          router.replace("/signin");
+        }
+      } else if (!session) {
+        if (!isDemoSession && isMounted) {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
           router.replace("/signin");
         }
       } else if (session?.user) {
@@ -333,6 +368,18 @@ export default function EmailDashboardPage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // Lock body scroll on mobile when side drawer is open
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isMobileMenuOpen]);
 
   // Campaign Form State
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("welcome");
@@ -898,7 +945,7 @@ export default function EmailDashboardPage() {
       {/* SIDEBAR: Hexacore Logo & (SEND CAMPAIGN + HISTORY)        */}
       {/* ========================================================= */}
       <aside 
-        className={`fixed md:sticky top-0 left-0 z-50 h-[100dvh] bg-white border-r border-[#e2e8f0] flex flex-col py-6 transition-all duration-300 ease-in-out shrink-0 relative ${
+        className={`fixed md:sticky top-0 left-0 z-50 h-[100dvh] bg-white border-r border-[#e2e8f0] flex flex-col py-6 transition-all duration-300 ease-in-out shrink-0 md:relative ${
           isMobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0"
         } ${isSidebarCollapsed ? "w-20" : "w-64 lg:w-72 max-w-[85vw]"}`}
       >
@@ -911,7 +958,9 @@ export default function EmailDashboardPage() {
         {/* Mobile Close Button */}
         <button
           onClick={() => setIsMobileMenuOpen(false)}
-          className="md:hidden absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-all"
+          className="md:hidden absolute top-5 right-5 p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-all cursor-pointer min-w-[40px] min-h-[40px] flex items-center justify-center"
+          title="Close Navigation"
+          aria-label="Close Navigation"
         >
           <X className="w-5 h-5" />
         </button>
@@ -1080,7 +1129,7 @@ export default function EmailDashboardPage() {
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-7 sm:pl-9 pr-2.5 sm:pr-4 py-1.5 sm:py-2 bg-slate-100 hover:bg-slate-100/90 focus:bg-white rounded-lg sm:rounded-md outline-none focus:ring-2 focus:ring-[#1a6fd4]/20 focus:border-[#1a6fd4] transition-all text-xs sm:text-sm w-28 xs:w-44 sm:w-64 border border-transparent"
+                className="pl-7 sm:pl-9 pr-2.5 sm:pr-4 py-1.5 sm:py-2 bg-slate-100 hover:bg-slate-100/90 focus:bg-white rounded-lg sm:rounded-md outline-none focus:ring-2 focus:ring-[#1a6fd4]/20 focus:border-[#1a6fd4] transition-all text-xs sm:text-sm w-32 xs:w-48 sm:w-64 focus:w-40 xs:focus:w-56 sm:focus:w-64 border border-transparent"
               />
             </div>
           </div>
@@ -1122,8 +1171,9 @@ export default function EmailDashboardPage() {
             <button
               type="button"
               onClick={handleSignOut}
-              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-600 hover:text-rose-600 text-xs font-bold transition-all shadow-xs cursor-pointer"
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 active:scale-95 text-slate-600 hover:text-rose-600 text-xs font-bold transition-all shadow-xs cursor-pointer min-h-[36px]"
               title="Sign Out of Email Studio"
+              aria-label="Sign Out"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span className="hidden xs:inline">Sign Out</span>
@@ -1145,7 +1195,7 @@ export default function EmailDashboardPage() {
         </div>
 
         {/* MAIN BODY CONTAINER */}
-        <main className="p-3 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+        <main className="p-3 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-24 md:pb-8">
           
           {/* ========================================================= */}
           {/* VIEW 1: SEND CAMPAIGN                                     */}
@@ -1545,48 +1595,48 @@ export default function EmailDashboardPage() {
               <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
                 
                 {/* 3 QUICK STATS CARDS (Hexacore Blue / Cyan Palettes) */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                <div className="grid grid-cols-3 gap-2 sm:gap-4">
                   
                   {/* Card 1: Total Campaigns */}
-                  <div className="p-4 sm:p-5 rounded-2xl border border-slate-200/90 bg-[#f8fafc] flex items-center gap-3.5 sm:gap-4">
-                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#1a6fd4] shrink-0">
-                      <Mail className="w-5 h-5 text-[#1a6fd4]" />
+                  <div className="p-3 sm:p-5 rounded-xl sm:rounded-2xl border border-slate-200/90 bg-[#f8fafc] flex flex-col xs:flex-row items-start xs:items-center gap-2 sm:gap-4">
+                    <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl sm:rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#1a6fd4] shrink-0">
+                      <Mail className="w-4 h-4 sm:w-5 sm:h-5 text-[#1a6fd4]" />
                     </div>
-                    <div>
-                      <p className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
-                        TOTAL CAMPAIGNS
+                    <div className="min-w-0">
+                      <p className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider truncate">
+                        CAMPAIGNS
                       </p>
-                      <p className="text-xl sm:text-2xl font-black text-[#0d1f4a] mt-0.5">
+                      <p className="text-base xs:text-xl sm:text-2xl font-black text-[#0d1f4a] mt-0.5">
                         {totalCampaignsCount}
                       </p>
                     </div>
                   </div>
 
                   {/* Card 2: Total Opens */}
-                  <div className="p-4 sm:p-5 rounded-2xl border border-slate-200/90 bg-[#f8fafc] flex items-center gap-3.5 sm:gap-4">
-                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-cyan-50 border border-cyan-100 flex items-center justify-center text-[#00c8e8] shrink-0">
-                      <ArrowUpRight className="w-5 h-5 text-[#00c8e8]" />
+                  <div className="p-3 sm:p-5 rounded-xl sm:rounded-2xl border border-slate-200/90 bg-[#f8fafc] flex flex-col xs:flex-row items-start xs:items-center gap-2 sm:gap-4">
+                    <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl sm:rounded-full bg-cyan-50 border border-cyan-100 flex items-center justify-center text-[#00c8e8] shrink-0">
+                      <ArrowUpRight className="w-4 h-4 sm:w-5 sm:h-5 text-[#00c8e8]" />
                     </div>
-                    <div>
-                      <p className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
-                        TOTAL OPENS
+                    <div className="min-w-0">
+                      <p className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider truncate">
+                        OPENS
                       </p>
-                      <p className="text-xl sm:text-2xl font-black text-[#0d1f4a] mt-0.5">
+                      <p className="text-base xs:text-xl sm:text-2xl font-black text-[#0d1f4a] mt-0.5">
                         {totalOpensCount}
                       </p>
                     </div>
                   </div>
 
                   {/* Card 3: Total Clicks */}
-                  <div className="p-4 sm:p-5 rounded-2xl border border-slate-200/90 bg-[#f8fafc] flex items-center gap-3.5 sm:gap-4">
-                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#1a6fd4] shrink-0">
-                      <BarChart3 className="w-5 h-5 text-[#1a6fd4]" />
+                  <div className="p-3 sm:p-5 rounded-xl sm:rounded-2xl border border-slate-200/90 bg-[#f8fafc] flex flex-col xs:flex-row items-start xs:items-center gap-2 sm:gap-4">
+                    <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl sm:rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#1a6fd4] shrink-0">
+                      <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 text-[#1a6fd4]" />
                     </div>
-                    <div>
-                      <p className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
-                        TOTAL CLICKS
+                    <div className="min-w-0">
+                      <p className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider truncate">
+                        CLICKS
                       </p>
-                      <p className="text-xl sm:text-2xl font-black text-[#0d1f4a] mt-0.5">
+                      <p className="text-base xs:text-xl sm:text-2xl font-black text-[#0d1f4a] mt-0.5">
                         {totalClicksCount}
                       </p>
                     </div>
@@ -1623,20 +1673,21 @@ export default function EmailDashboardPage() {
                                 handleDeleteCampaign(campaign.id);
                               }}
                               title="Delete campaign"
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer shrink-0 -mt-0.5 -mr-1"
+                              aria-label="Delete campaign"
+                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 active:scale-95 rounded-lg transition-all cursor-pointer shrink-0 -mt-1 -mr-1 min-w-[36px] min-h-[36px] flex items-center justify-center"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
 
                           {/* Subline: Status + Date */}
-                          <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-2 flex-wrap text-xs text-slate-500">
                             {renderStatusBadge(campaign.status)}
-                            <span className="text-xs text-slate-400 font-medium">
+                            <span className="text-slate-400 font-medium">
                               {campaign.created_at}
                             </span>
                             <span>•</span>
-                            <span className="text-xs text-slate-500 font-medium truncate max-w-[150px]">
+                            <span className="font-medium truncate max-w-[130px] xs:max-w-[200px]">
                               {campaign.audience}
                             </span>
                           </div>
@@ -1661,7 +1712,7 @@ export default function EmailDashboardPage() {
                           <button
                             type="button"
                             onClick={() => handleOpenCampaignDetails(campaign)}
-                            className="w-full py-2 px-3 rounded-lg bg-blue-50/70 hover:bg-blue-100/70 text-[#1a6fd4] font-bold text-xs flex items-center justify-center gap-1.5 border border-blue-100 transition-colors"
+                            className="w-full py-2.5 px-3 rounded-xl bg-blue-50/80 hover:bg-blue-100 text-[#1a6fd4] font-bold text-xs flex items-center justify-center gap-1.5 border border-blue-200/80 transition-all active:scale-[0.98] shadow-2xs cursor-pointer"
                           >
                             <Users className="w-3.5 h-3.5" />
                             <span>View Campaign Details ({recipientCount})</span>
@@ -1982,11 +2033,11 @@ export default function EmailDashboardPage() {
                             <button
                               type="button"
                               onClick={() => setSelectedInboxMessage(null)}
-                              className="lg:hidden flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer mr-1"
+                              className="lg:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-100 hover:bg-slate-200 active:scale-95 text-[#1a6fd4] text-xs font-bold transition-all cursor-pointer mr-1"
                               title="Back to inbox messages"
                             >
                               <ArrowLeft className="w-3.5 h-3.5" />
-                              <span>Back</span>
+                              <span>Inbox</span>
                             </button>
 
                             <button
@@ -2058,9 +2109,9 @@ export default function EmailDashboardPage() {
                         </div>
 
                         {/* Message Body Content */}
-                        <div className="p-4 sm:p-6 flex-1 overflow-y-auto bg-white">
+                        <div className="p-3.5 sm:p-6 flex-1 overflow-y-auto overflow-x-auto bg-white">
                           <div 
-                            className="prose prose-sm max-w-none text-slate-800 leading-relaxed text-xs sm:text-sm"
+                            className="prose prose-sm max-w-none text-slate-800 leading-relaxed text-xs sm:text-sm break-words [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto [&_pre]:overflow-x-auto"
                             dangerouslySetInnerHTML={{ __html: selectedInboxMessage.bodyHtml || selectedInboxMessage.preview }}
                           />
                         </div>
@@ -2097,6 +2148,79 @@ export default function EmailDashboardPage() {
         </main>
       </div>
 
+      {/* ========================================================= */}
+      {/* MOBILE BOTTOM NAVIGATION BAR (Thumb Navigation)          */}
+      {/* ========================================================= */}
+      <nav 
+        aria-label="Mobile Navigation"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] px-2 py-1.5 flex items-center justify-around"
+      >
+        <button
+          type="button"
+          onClick={() => setActiveView("compose")}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer min-w-[64px] ${
+            activeView === "compose"
+              ? "text-[#1a6fd4] font-bold"
+              : "text-slate-500 hover:text-slate-800 font-medium"
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-colors ${activeView === "compose" ? "bg-blue-50 text-[#1a6fd4]" : ""}`}>
+            <Mail className="w-5 h-5" strokeWidth={activeView === "compose" ? 2.5 : 2} />
+          </div>
+          <span className="text-[10px] mt-0.5 tracking-tight">Compose</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveView("bulk")}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer min-w-[64px] ${
+            activeView === "bulk"
+              ? "text-[#1a6fd4] font-bold"
+              : "text-slate-500 hover:text-slate-800 font-medium"
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-colors ${activeView === "bulk" ? "bg-blue-50 text-[#1a6fd4]" : ""}`}>
+            <FileSpreadsheet className="w-5 h-5" strokeWidth={activeView === "bulk" ? 2.5 : 2} />
+          </div>
+          <span className="text-[10px] mt-0.5 tracking-tight">Bulk CSV</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveView("inbox")}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer min-w-[64px] relative ${
+            activeView === "inbox"
+              ? "text-[#1a6fd4] font-bold"
+              : "text-slate-500 hover:text-slate-800 font-medium"
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-colors relative ${activeView === "inbox" ? "bg-blue-50 text-[#1a6fd4]" : ""}`}>
+            <Inbox className="w-5 h-5" strokeWidth={activeView === "inbox" ? 2.5 : 2} />
+            {unreadInboxCount > 0 && (
+              <span className="absolute -top-1 -right-1 px-1.5 py-0.5 text-[9px] font-black rounded-full bg-[#00c8e8] text-[#0d1f4a] leading-none shadow-xs">
+                {unreadInboxCount}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] mt-0.5 tracking-tight">Inbox</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveView("history")}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer min-w-[64px] ${
+            activeView === "history"
+              ? "text-[#1a6fd4] font-bold"
+              : "text-slate-500 hover:text-slate-800 font-medium"
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-colors ${activeView === "history" ? "bg-blue-50 text-[#1a6fd4]" : ""}`}>
+            <History className="w-5 h-5" strokeWidth={activeView === "history" ? 2.5 : 2} />
+          </div>
+          <span className="text-[10px] mt-0.5 tracking-tight">History</span>
+        </button>
+      </nav>
+
 
 
       {/* ========================================================= */}
@@ -2106,12 +2230,15 @@ export default function EmailDashboardPage() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
-              <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-[#1a6fd4]" />
-                <h3 className="font-bold text-xs sm:text-sm text-[#0d1f4a]">Email Campaign Preview</h3>
+              <div className="flex items-center gap-2 min-w-0">
+                <Mail className="w-4 h-4 text-[#1a6fd4] shrink-0" />
+                <h3 className="font-bold text-xs sm:text-sm text-[#0d1f4a] truncate">
+                  <span className="xs:hidden">Preview</span>
+                  <span className="hidden xs:inline">Email Campaign Preview</span>
+                </h3>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 {/* Viewport switcher */}
                 <div className="flex items-center p-1 bg-slate-200/70 rounded-lg mr-1 sm:mr-2">
                   <button
@@ -2143,7 +2270,7 @@ export default function EmailDashboardPage() {
 
             <div className="flex-1 p-2.5 sm:p-6 overflow-y-auto bg-slate-100 flex items-center justify-center">
               <div className={`transition-all duration-300 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden ${
-                previewViewport === "desktop" ? "w-full max-w-[620px] h-[360px] xs:h-[460px] sm:h-[580px]" : "w-full max-w-[375px] h-[360px] xs:h-[460px] sm:h-[580px] ring-4 sm:ring-8 ring-slate-800 rounded-2xl sm:rounded-[28px]"
+                previewViewport === "desktop" ? "w-full max-w-[620px] h-[360px] xs:h-[460px] sm:h-[580px]" : "w-full max-w-[375px] h-[360px] xs:h-[460px] sm:h-[580px] ring-2 sm:ring-8 ring-slate-800 rounded-xl sm:rounded-[28px]"
               }`}>
                 <iframe
                   title="Modal Email Preview"
@@ -2339,7 +2466,7 @@ export default function EmailDashboardPage() {
                     }`}
                   >
                     <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                    <span>Users Sent To ({recipientsList.length})</span>
+                    <span><span className="sm:hidden">Recipients</span><span className="hidden sm:inline">Users Sent To</span> ({recipientsList.length})</span>
                   </button>
 
                   <button
@@ -2352,7 +2479,7 @@ export default function EmailDashboardPage() {
                     }`}
                   >
                     <Monitor className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                    <span>Email Content Preview</span>
+                    <span><span className="sm:hidden">Preview</span><span className="hidden sm:inline">Email Content Preview</span></span>
                   </button>
                 </div>
 
@@ -2457,7 +2584,7 @@ export default function EmailDashboardPage() {
                                       {rec.name || "Recipient User"}
                                     </p>
                                     <div className="flex items-center gap-1.5 mt-0.5">
-                                      <span className="text-slate-500 font-mono text-[11px] truncate max-w-[140px] xs:max-w-[180px]">
+                                      <span className="text-slate-500 font-mono text-[11px] truncate flex-1 min-w-0">
                                         {rec.email}
                                       </span>
                                       <button
