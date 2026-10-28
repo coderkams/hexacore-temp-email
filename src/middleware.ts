@@ -5,6 +5,8 @@ const DEFAULT_SUPABASE_URL = "https://poggfmbfvdvobsbsdiqs.supabase.co";
 const DEFAULT_SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvZ2dmbWJmdmR2b2JzYnNkaXFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3ODkxODYsImV4cCI6MjA5OTM2NTE4Nn0.RqXCTCXc-0d_Pl0fwD-vlMBYcU9IroQGPGrV2oSTQd4";
 
+const ALLOWED_INTERNAL_EMAIL = "hexacoresupport@gmail.com";
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -34,7 +36,7 @@ export async function middleware(request: NextRequest) {
     });
 
     const { data, error } = await supabase.auth.getUser();
-    if (!error && data?.user) {
+    if (!error && data?.user && data.user.email?.toLowerCase() === ALLOWED_INTERNAL_EMAIL) {
       user = data.user;
     }
   } catch (err) {

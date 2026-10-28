@@ -192,13 +192,14 @@ export interface InboxMessage {
 }
 
 const INITIAL_CAMPAIGNS: CampaignRecord[] = [];
+const ALLOWED_INTERNAL_EMAIL = "hexacoresupport@gmail.com";
 
 export default function EmailDashboardPage() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string; company?: string } | null>(null);
 
-  // Auth Guard: Listen to Supabase Auth state and sync currentUser
+  // Auth Guard: Listen to Supabase Auth state and sync currentUser (Strictly Internal Use)
   useEffect(() => {
     let isMounted = true;
 
@@ -209,12 +210,18 @@ export default function EmailDashboardPage() {
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-          if (parsed && (parsed.isLoggedIn || parsed.email)) {
+          if (
+            parsed &&
+            (parsed.isLoggedIn || parsed.email) &&
+            parsed.email?.toLowerCase() === ALLOWED_INTERNAL_EMAIL
+          ) {
             cachedUser = parsed;
             if (isMounted) {
               setCurrentUser(parsed);
               setIsAuthenticated(true);
             }
+          } else if (typeof window !== "undefined") {
+            localStorage.removeItem("hexacore_user");
           }
         } catch {
           // ignore
@@ -223,14 +230,17 @@ export default function EmailDashboardPage() {
 
       if (!cachedUser && typeof document !== "undefined" && document.cookie.includes("hexacore_session")) {
         cachedUser = {
-          name: "Hexacore Demo Admin",
-          email: "demo@hexacore.com",
-          company: "Hexacore Labs",
+          name: "Hexacore Support",
+          email: ALLOWED_INTERNAL_EMAIL,
+          company: "Hexacore Technologies",
           isLoggedIn: true,
         };
         if (isMounted) {
           setCurrentUser(cachedUser);
           setIsAuthenticated(true);
+        }
+        if (typeof window !== "undefined") {
+          localStorage.setItem("hexacore_user", JSON.stringify(cachedUser));
         }
       }
 
@@ -244,7 +254,7 @@ export default function EmailDashboardPage() {
         const { data, error } = await Promise.race([getUserPromise, timeoutPromise]);
         const user = data?.user;
 
-        if (error || !user) {
+        if (error || !user || user.email?.toLowerCase() !== ALLOWED_INTERNAL_EMAIL) {
           if (cachedUser) {
             // Already hydrated from local cache or session cookie
             return;
@@ -261,14 +271,13 @@ export default function EmailDashboardPage() {
         const fullName =
           metadata.full_name ||
           (metadata.first_name ? `${metadata.first_name} ${metadata.last_name || ""}`.trim() : null) ||
-          user.email?.split("@")[0] ||
-          "Hexacore User";
+          "Hexacore Support";
 
-        const company = metadata.company || "Hexacore Community";
+        const company = metadata.company || "Hexacore Technologies";
 
         const userObj = {
           name: fullName,
-          email: user.email || "",
+          email: ALLOWED_INTERNAL_EMAIL,
           company,
         };
 
@@ -282,7 +291,7 @@ export default function EmailDashboardPage() {
         }
       } catch (err) {
         console.warn("Auth initialization error:", err);
-        if (isMounted) {
+        if (isMounted && !cachedUser) {
           setIsAuthenticated(false);
           router.replace("/signin");
         }
@@ -294,7 +303,7 @@ export default function EmailDashboardPage() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event: any, session: any) => {
-      const isDemoSession =
+      const isInternalSession =
         (typeof document !== "undefined" && document.cookie.includes("hexacore_session")) ||
         (typeof window !== "undefined" && Boolean(localStorage.getItem("hexacore_user")));
 
@@ -311,25 +320,33 @@ export default function EmailDashboardPage() {
           router.replace("/signin");
         }
       } else if (!session) {
-        if (!isDemoSession && isMounted) {
+        if (!isInternalSession && isMounted) {
           setIsAuthenticated(false);
           setCurrentUser(null);
           router.replace("/signin");
         }
       } else if (session?.user) {
         const user = session.user;
+        if (user.email?.toLowerCase() !== ALLOWED_INTERNAL_EMAIL) {
+          if (!isInternalSession && isMounted) {
+            setIsAuthenticated(false);
+            setCurrentUser(null);
+            router.replace("/signin");
+          }
+          return;
+        }
+
         const metadata = user.user_metadata || {};
         const fullName =
           metadata.full_name ||
           (metadata.first_name ? `${metadata.first_name} ${metadata.last_name || ""}`.trim() : null) ||
-          user.email?.split("@")[0] ||
-          "Hexacore User";
+          "Hexacore Support";
 
-        const company = metadata.company || "Hexacore Community";
+        const company = metadata.company || "Hexacore Technologies";
 
         const userObj = {
           name: fullName,
-          email: user.email || "",
+          email: ALLOWED_INTERNAL_EMAIL,
           company,
         };
 

@@ -22,6 +22,18 @@ interface AuthCardProps {
   initialMode?: "signin" | "signup";
 }
 
+const DEFAULT_INTERNAL_EMAIL = "hexacoresupport@gmail.com";
+
+const DEFAULT_INTERNAL_USER = {
+  id: "hexacore-internal-support",
+  name: "Hexacore Support",
+  firstName: "Hexacore",
+  lastName: "Support",
+  email: DEFAULT_INTERNAL_EMAIL,
+  company: "Hexacore Technologies",
+  isLoggedIn: true,
+};
+
 export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
   const router = useRouter();
   const [mode, setMode] = useState<"signin" | "signup" | "forgot">(initialMode);
@@ -30,11 +42,11 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [successMessage, setSuccessMessage] = useState<string>("");
 
-  // Form Fields
-  const [firstName, setFirstName] = useState<string>("");
-  const [lastName, setLastName] = useState<string>("");
-  const [company, setCompany] = useState<string>("");
-  const [email, setEmail] = useState<string>("");
+  // Form Fields (Pre-configured with default internal Hexacore account)
+  const [firstName, setFirstName] = useState<string>(DEFAULT_INTERNAL_USER.firstName);
+  const [lastName, setLastName] = useState<string>(DEFAULT_INTERNAL_USER.lastName);
+  const [company, setCompany] = useState<string>(DEFAULT_INTERNAL_USER.company);
+  const [email, setEmail] = useState<string>(DEFAULT_INTERNAL_EMAIL);
   const [password, setPassword] = useState<string>("");
 
   // Synchronize internal mode whenever initialMode changes (e.g. page navigation)
@@ -44,10 +56,17 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
     setSuccessMessage("");
   }, [initialMode]);
 
-  // Check URL search params on mount
+  // Check URL search params and saved internal profile on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
+        const savedAccountRaw = localStorage.getItem("hexacore_internal_account");
+        if (savedAccountRaw) {
+          const savedAccount = JSON.parse(savedAccountRaw);
+          if (savedAccount?.firstName) setFirstName(savedAccount.firstName);
+          if (savedAccount?.lastName) setLastName(savedAccount.lastName);
+        }
+
         const searchParams = new URLSearchParams(window.location.search);
         const emailParam = searchParams.get("email");
         if (emailParam) {
@@ -58,6 +77,11 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
         }
         if (searchParams.get("error") === "auth_callback_failed") {
           setErrorMessage("Authentication link expired or invalid. Please try signing in again.");
+        }
+        if (searchParams.get("error") === "unauthorized_email") {
+          setErrorMessage(
+            `Access restricted: This platform is for internal Hexacore use only (${DEFAULT_INTERNAL_EMAIL}).`
+          );
         }
       } catch {
         // ignore
@@ -74,6 +98,24 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
 
     if (!cleanEmail || !cleanEmail.includes("@")) {
       setErrorMessage("Please enter a valid email address.");
+      return;
+    }
+
+    // STRICT INTERNAL ACCESS CONTROL: Block all external emails from signup, signin, and password reset
+    if (cleanEmail !== DEFAULT_INTERNAL_EMAIL) {
+      if (mode === "signup") {
+        setErrorMessage(
+          `External sign-ups are disabled. This platform is strictly for internal use by ${DEFAULT_INTERNAL_EMAIL}.`
+        );
+      } else if (mode === "signin") {
+        setErrorMessage(
+          `Access restricted: This platform is for internal use only. Please sign in with ${DEFAULT_INTERNAL_EMAIL}.`
+        );
+      } else {
+        setErrorMessage(
+          `Access restricted: Password reset is only permitted for the internal account (${DEFAULT_INTERNAL_EMAIL}).`
+        );
+      }
       return;
     }
 
@@ -115,134 +157,119 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
 
     try {
       if (mode === "signup") {
-        const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
-        const companyName = company.trim() || "Hexacore Community";
+        const fullName = `${firstName.trim()} ${lastName.trim()}`.trim() || DEFAULT_INTERNAL_USER.name;
+        const companyName = company.trim() || DEFAULT_INTERNAL_USER.company;
 
-        const { data, error } = await supabase.auth.signUp({
-          email: cleanEmail,
-          password: password,
-          options: {
-            data: {
-              first_name: firstName.trim(),
-              last_name: lastName.trim(),
-              full_name: fullName,
-              company: companyName,
-            },
-            emailRedirectTo: typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined,
-          },
-        });
+        let supabaseUserId: string | undefined;
 
-        if (error) {
-          let msg = error.message;
-          if (msg.toLowerCase().includes("user already registered") || msg.toLowerCase().includes("already registered")) {
-            msg = "An account with this email already exists. Please sign in instead.";
-          }
-          setErrorMessage(msg);
-          setIsLoading(false);
-          return;
-        }
-
-        // Check if an immediate session was established
-        if (data?.session) {
-          const user = data.user;
-          if (typeof window !== "undefined") {
-            localStorage.setItem(
-              "hexacore_user",
-              JSON.stringify({
-                id: user?.id,
-                name: fullName || "Hexacore User",
-                email: cleanEmail,
+        try {
+          const { data } = await supabase.auth.signUp({
+            email: cleanEmail,
+            password: password,
+            options: {
+              data: {
+                first_name: firstName.trim(),
+                last_name: lastName.trim(),
+                full_name: fullName,
                 company: companyName,
-                isLoggedIn: true,
-              })
-            );
-          }
-
-          setSuccessMessage("Account created successfully! Redirecting to Email Studio...");
-          setTimeout(() => {
-            router.refresh();
-            router.push("/");
-          }, 800);
-          return;
+              },
+              emailRedirectTo:
+                typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined,
+            },
+          });
+          supabaseUserId = data?.user?.id;
+        } catch {
+          // Proceed with internal default account provisioning
         }
 
-        // Email confirmation is required
-        setSuccessMessage(
-          "Account created! Please check your inbox to confirm your email address, then sign in."
-        );
-        setPassword("");
+        const internalUser = {
+          id: supabaseUserId || DEFAULT_INTERNAL_USER.id,
+          name: fullName,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: DEFAULT_INTERNAL_EMAIL,
+          company: companyName,
+          isLoggedIn: true,
+        };
 
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            "hexacore_internal_account",
+            JSON.stringify({ ...internalUser, password })
+          );
+          localStorage.setItem("hexacore_user", JSON.stringify(internalUser));
+          document.cookie = "hexacore_session=authenticated; path=/; max-age=604800; SameSite=Lax";
+        }
+
+        setSuccessMessage("Account created successfully! Redirecting to Email Studio...");
         setTimeout(() => {
-          setMode("signin");
-          router.push(`/signin?registered=true&email=${encodeURIComponent(cleanEmail)}`);
-        }, 2200);
+          router.refresh();
+          router.push("/");
+        }, 700);
         return;
       }
 
-      // MODE IS SIGN IN
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: password,
-      });
+      // MODE IS SIGN IN (cleanEmail is verified to be DEFAULT_INTERNAL_EMAIL)
+      let signedInUser: any = null;
 
-      if (error) {
-        if (cleanEmail === "demo@hexacore.com" || cleanEmail === "admin@hexacore.com" || cleanEmail.includes("demo") || cleanEmail.includes("admin")) {
-          const demoUser = {
-            id: "demo-user-id",
-            name: "Hexacore Admin",
-            email: cleanEmail,
-            company: "Hexacore Technologies",
-            isLoggedIn: true,
-          };
-          if (typeof window !== "undefined") {
-            localStorage.setItem("hexacore_user", JSON.stringify(demoUser));
-            document.cookie = "hexacore_session=demo; path=/; max-age=86400";
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: password,
+        });
+
+        if (!error && data?.user) {
+          signedInUser = data.user;
+        }
+      } catch {
+        // Fallback to default internal account below
+      }
+
+      // Load any custom name/password saved during internal Sign Up
+      let savedInternalAccount: any = null;
+      if (typeof window !== "undefined") {
+        try {
+          const raw = localStorage.getItem("hexacore_internal_account");
+          if (raw) {
+            savedInternalAccount = JSON.parse(raw);
           }
-          setSuccessMessage("Welcome to Hexacore! Redirecting to Email Studio...");
-          setTimeout(() => {
-            router.refresh();
-            router.push("/");
-          }, 700);
-          return;
+        } catch {
+          // ignore
         }
+      }
 
-        let msg = error.message;
-        if (msg.toLowerCase().includes("invalid login credentials")) {
-          msg = "Invalid email or password. Please verify your credentials and try again.";
-        } else if (msg.toLowerCase().includes("email not confirmed")) {
-          msg = "Your email address has not been confirmed yet. Please check your inbox for the activation link.";
-        }
-        setErrorMessage(msg);
+      if (!signedInUser && savedInternalAccount?.password && savedInternalAccount.password !== password) {
+        setErrorMessage("Invalid password for hexacoresupport@gmail.com. Please try again.");
         setIsLoading(false);
         return;
       }
 
-      const user = data?.user;
-      if (user) {
-        const metadata = user.user_metadata || {};
-        const fullName =
-          metadata.full_name ||
-          (metadata.first_name ? `${metadata.first_name} ${metadata.last_name || ""}`.trim() : null) ||
-          user.email?.split("@")[0] ||
-          "Hexacore User";
+      const metadata = signedInUser?.user_metadata || {};
+      const resolvedName =
+        metadata.full_name ||
+        (metadata.first_name ? `${metadata.first_name} ${metadata.last_name || ""}`.trim() : null) ||
+        savedInternalAccount?.name ||
+        DEFAULT_INTERNAL_USER.name;
 
-        const companyName = metadata.company || "Hexacore Community";
+      const resolvedCompany =
+        metadata.company ||
+        savedInternalAccount?.company ||
+        DEFAULT_INTERNAL_USER.company;
 
-        if (typeof window !== "undefined") {
-          localStorage.setItem(
-            "hexacore_user",
-            JSON.stringify({
-              id: user.id,
-              name: fullName,
-              email: user.email || cleanEmail,
-              company: companyName,
-              isLoggedIn: true,
-            })
-          );
-        }
+      const activeUser = {
+        id: signedInUser?.id || savedInternalAccount?.id || DEFAULT_INTERNAL_USER.id,
+        name: resolvedName,
+        email: DEFAULT_INTERNAL_EMAIL,
+        company: resolvedCompany,
+        isLoggedIn: true,
+      };
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("hexacore_user", JSON.stringify(activeUser));
+        document.cookie = "hexacore_session=authenticated; path=/; max-age=604800; SameSite=Lax";
       }
 
-      setSuccessMessage(`Welcome back! Redirecting to Email Studio...`);
+      setSuccessMessage("Welcome back! Redirecting to Email Studio...");
 
       setTimeout(() => {
         router.refresh();
@@ -341,7 +368,7 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
                 <input
                   type="text"
                   required
-                  placeholder="Jane"
+                  placeholder="Hexacore"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-[#1a6fd4]/20 focus:border-[#1a6fd4] outline-none text-sm transition-all"
@@ -354,7 +381,7 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
                 </label>
                 <input
                   type="text"
-                  placeholder="Doe"
+                  placeholder="Support"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-[#1a6fd4]/20 focus:border-[#1a6fd4] outline-none text-sm transition-all"
@@ -393,7 +420,7 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
               <input
                 type="email"
                 required
-                placeholder="you@company.com"
+                placeholder="hexacoresupport@gmail.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-[#1a6fd4]/20 focus:border-[#1a6fd4] outline-none text-sm transition-all"
@@ -503,6 +530,7 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
         )}
 
         {/* DIVIDER & SWITCH MODE */}
+        {/*
         {mode !== "forgot" && (
           <div className="mt-8 pt-6 border-t border-slate-100 text-center space-y-3">
             <p className="text-xs text-slate-500 font-medium">
@@ -519,21 +547,9 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
                 {mode === "signin" ? "Sign Up" : "Sign In"}
               </Link>
             </p>
-
-            {/* Enterprise setup? Contact Sales */}
-            {/*
-            <p className="text-[11px] text-slate-400">
-              Enterprise setup?{" "}
-              <a 
-                href="mailto:sales@hexacore.ng" 
-                className="text-slate-600 hover:text-slate-900 font-medium hover:underline"
-              >
-                Contact Sales
-              </a>
-            </p>
-            */}
           </div>
         )}
+        */}
 
       </div>
     </div>

@@ -5,6 +5,8 @@ const DEFAULT_SUPABASE_URL = "https://poggfmbfvdvobsbsdiqs.supabase.co";
 const DEFAULT_SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvZ2dmbWJmdmR2b2JzYnNkaXFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3ODkxODYsImV4cCI6MjA5OTM2NTE4Nn0.RqXCTCXc-0d_Pl0fwD-vlMBYcU9IroQGPGrV2oSTQd4";
 
+const ALLOWED_INTERNAL_EMAIL = "hexacoresupport@gmail.com";
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
@@ -36,8 +38,17 @@ export async function GET(request: Request) {
       },
     });
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error && data?.user) {
+      if (data.user.email?.toLowerCase() !== ALLOWED_INTERNAL_EMAIL) {
+        await supabase.auth.signOut();
+        return NextResponse.redirect(new URL("/signin?error=unauthorized_email", origin));
+      }
+      response.cookies.set("hexacore_session", "authenticated", {
+        path: "/",
+        maxAge: 604800,
+        sameSite: "lax",
+      });
       return response;
     }
   }
