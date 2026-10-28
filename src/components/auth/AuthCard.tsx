@@ -42,11 +42,11 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [successMessage, setSuccessMessage] = useState<string>("");
 
-  // Form Fields (Pre-configured with default internal Hexacore account)
-  const [firstName, setFirstName] = useState<string>(DEFAULT_INTERNAL_USER.firstName);
-  const [lastName, setLastName] = useState<string>(DEFAULT_INTERNAL_USER.lastName);
-  const [company, setCompany] = useState<string>(DEFAULT_INTERNAL_USER.company);
-  const [email, setEmail] = useState<string>(DEFAULT_INTERNAL_EMAIL);
+  // Form Fields
+  const [firstName, setFirstName] = useState<string>("");
+  const [lastName, setLastName] = useState<string>("");
+  const [company, setCompany] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
 
   // Synchronize internal mode whenever initialMode changes (e.g. page navigation)
@@ -80,7 +80,7 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
         }
         if (searchParams.get("error") === "unauthorized_email") {
           setErrorMessage(
-            `Access restricted: This platform is for internal Hexacore use only (${DEFAULT_INTERNAL_EMAIL}).`
+            "Access restricted: This platform is for internal Hexacore use only."
           );
         }
       } catch {
@@ -105,15 +105,15 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
     if (cleanEmail !== DEFAULT_INTERNAL_EMAIL) {
       if (mode === "signup") {
         setErrorMessage(
-          `External sign-ups are disabled. This platform is strictly for internal use by ${DEFAULT_INTERNAL_EMAIL}.`
+          "External sign-ups are disabled. This platform is strictly for internal Hexacore use."
         );
       } else if (mode === "signin") {
         setErrorMessage(
-          `Access restricted: This platform is for internal use only. Please sign in with ${DEFAULT_INTERNAL_EMAIL}.`
+          "Access restricted: This platform is strictly for internal Hexacore use."
         );
       } else {
         setErrorMessage(
-          `Access restricted: Password reset is only permitted for the internal account (${DEFAULT_INTERNAL_EMAIL}).`
+          "Access restricted: Password reset is only permitted for authorized internal accounts."
         );
       }
       return;
@@ -420,7 +420,7 @@ export default function AuthCard({ initialMode = "signin" }: AuthCardProps) {
               <input
                 type="email"
                 required
-                placeholder="hexacoresupport@gmail.com"
+                placeholder="you@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-[#1a6fd4]/20 focus:border-[#1a6fd4] outline-none text-sm transition-all"
