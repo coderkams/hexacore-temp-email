@@ -611,30 +611,50 @@ export default function EmailDashboardPage() {
   const unreadInboxCount = inboxMessages.filter((m) => m.isUnread).length;
   const starredInboxCount = inboxMessages.filter((m) => m.isStarred).length;
 
-  // Toggle star
+  //Toggle star
   const handleToggleStar = (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
+    let nextStarred = false;
     setInboxMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === id ? { ...msg, isStarred: !msg.isStarred } : msg
-      )
+      prev.map((msg) => {
+        if (msg.id === id) {
+          nextStarred = !msg.isStarred;
+          return { ...msg, isStarred: nextStarred };
+        }
+        return msg;
+      })
     );
     if (selectedInboxMessage?.id === id) {
-      setSelectedInboxMessage((prev) => prev ? { ...prev, isStarred: !prev.isStarred } : null);
+      setSelectedInboxMessage((prev) => (prev ? { ...prev, isStarred: !prev.isStarred } : null));
     }
+    fetch("/api/inbox", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, isStarred: nextStarred }),
+    }).catch(() => {});
   };
 
   // Toggle unread
   const handleToggleUnread = (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
+    let nextUnread = false;
     setInboxMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === id ? { ...msg, isUnread: !msg.isUnread } : msg
-      )
+      prev.map((msg) => {
+        if (msg.id === id) {
+          nextUnread = !msg.isUnread;
+          return { ...msg, isUnread: nextUnread };
+        }
+        return msg;
+      })
     );
     if (selectedInboxMessage?.id === id) {
-      setSelectedInboxMessage((prev) => prev ? { ...prev, isUnread: !prev.isUnread } : null);
+      setSelectedInboxMessage((prev) => (prev ? { ...prev, isUnread: !prev.isUnread } : null));
     }
+    fetch("/api/inbox", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, isUnread: nextUnread }),
+    }).catch(() => {});
   };
 
   // Delete message
@@ -658,6 +678,11 @@ export default function EmailDashboardPage() {
       setInboxMessages((prev) =>
         prev.map((m) => (m.id === msg.id ? { ...m, isUnread: false } : m))
       );
+      fetch("/api/inbox", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: msg.id, isUnread: false }),
+      }).catch(() => {});
     }
     setSelectedInboxMessage({ ...msg, isUnread: false });
   };
