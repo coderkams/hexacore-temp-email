@@ -547,6 +547,26 @@ export default function EmailDashboardPage() {
     }
   }, [activeView]);
 
+  // Client-side persistence helpers for inbox deleted/read/starred states
+  const getStoredIdSet = (key: string): Set<string> => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch {
+      return new Set();
+    }
+  };
+
+  const saveStoredIdSet = (key: string, set: Set<string>) => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(key, JSON.stringify(Array.from(set)));
+    } catch {
+      // ignore
+    }
+  };
+
   // Fetch inbox messages
   const fetchInbox = async (silent = false) => {
     if (!silent) setIsRefreshingInbox(true);
@@ -554,13 +574,27 @@ export default function EmailDashboardPage() {
       const res = await fetch("/api/inbox");
       const data = await res.json();
       if (data.success && Array.isArray(data.messages)) {
-        setInboxMessages(data.messages);
-        if (data.messages.length > 0) {
+        const deletedIds = getStoredIdSet("hexacore_inbox_deleted_ids");
+        const readIds = getStoredIdSet("hexacore_inbox_read_ids");
+        const starredIds = getStoredIdSet("hexacore_inbox_starred_ids");
+
+        const filteredAndMerged: InboxMessage[] = data.messages
+          .filter((m: InboxMessage) => !deletedIds.has(m.id))
+          .map((m: InboxMessage) => ({
+            ...m,
+            isUnread: readIds.has(m.id) ? false : m.isUnread,
+            isStarred: starredIds.has(m.id) ? true : m.isStarred,
+          }));
+
+        setInboxMessages(filteredAndMerged);
+        if (filteredAndMerged.length > 0) {
           setSelectedInboxMessage((prev) => {
-            if (!prev) return data.messages[0];
-            const found = data.messages.find((m: any) => m.id === prev.id);
-            return found || data.messages[0];
+            if (!prev) return filteredAndMerged[0];
+            const found = filteredAndMerged.find((m) => m.id === prev.id);
+            return found || filteredAndMerged[0];
           });
+        } else {
+          setSelectedInboxMessage(null);
         }
       }
     } catch (err) {
@@ -624,6 +658,14 @@ export default function EmailDashboardPage() {
         return msg;
       })
     );
+    const starredIds = getStoredIdSet("hexacore_inbox_starred_ids");
+    if (nextStarred) {
+      starredIds.add(id);
+    } else {
+      starredIds.delete(id);
+    }
+    saveStoredIdSet("hexacore_inbox_starred_ids", starredIds);
+
     if (selectedInboxMessage?.id === id) {
       setSelectedInboxMessage((prev) => (prev ? { ...prev, isStarred: !prev.isStarred } : null));
     }
@@ -647,6 +689,14 @@ export default function EmailDashboardPage() {
         return msg;
       })
     );
+    const readIds = getStoredIdSet("hexacore_inbox_read_ids");
+    if (nextUnread) {
+      readIds.delete(id);
+    } else {
+      readIds.add(id);
+    }
+    saveStoredIdSet("hexacore_inbox_read_ids", readIds);
+
     if (selectedInboxMessage?.id === id) {
       setSelectedInboxMessage((prev) => (prev ? { ...prev, isUnread: !prev.isUnread } : null));
     }
@@ -660,10 +710,21 @@ export default function EmailDashboardPage() {
   // Delete message
   const handleDeleteInboxMessage = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    setInboxMessages((prev) => prev.filter((m) => m.id !== id));
-    if (selectedInboxMessage?.id === id) {
+    const deletedIds = getStoredIdSet("hexacore_inbox_deleted_ids");
+    if (id === "all") {
+      inboxMessages.forEach((m) => deletedIds.add(m.id));
+      saveStoredIdSet("hexacore_inbox_deleted_ids", deletedIds);
+      setInboxMessages([]);
+      setSelectedInboxMessage(null);
+    } else {
+      deletedIds.add(id);
+      saveStoredIdSet("hexacore_inbox_deleted_ids", deletedIds);
+
       const remaining = inboxMessages.filter((m) => m.id !== id);
-      setSelectedInboxMessage(remaining.length > 0 ? remaining[0] : null);
+      setInboxMessages(remaining);
+      if (selectedInboxMessage?.id === id) {
+        setSelectedInboxMessage(remaining.length > 0 ? remaining[0] : null);
+      }
     }
     try {
       await fetch(`/api/inbox?id=${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -674,6 +735,10 @@ export default function EmailDashboardPage() {
 
   // Select message and mark read
   const handleSelectInboxMessage = (msg: InboxMessage) => {
+    const readIds = getStoredIdSet("hexacore_inbox_read_ids");
+    readIds.add(msg.id);
+    saveStoredIdSet("hexacore_inbox_read_ids", readIds);
+
     if (msg.isUnread) {
       setInboxMessages((prev) =>
         prev.map((m) => (m.id === msg.id ? { ...m, isUnread: false } : m))
@@ -1906,6 +1971,17 @@ export default function EmailDashboardPage() {
                     <span>Simulate Reply</span>
                   </button>
                   */}
+
+                  {inboxMessages.length > 0 && (
+                    <button
+                      onClick={(e) => handleDeleteInboxMessage("all", e)}
+                      title="Delete all inbox messages"
+                      className="flex items-center gap-1.5 px-3 py-1.5 border border-rose-200 bg-rose-50/70 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Clear All</span>
+                    </button>
+                  )}
 
                   <button
                     onClick={() => fetchInbox(false)}

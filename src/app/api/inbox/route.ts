@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { getBrevoConfig } from "@/lib/brevo";
 import {
-  inMemoryInbox,
   addInboxMessage,
   removeInboxMessage,
+  updateInboxMessageState,
   isInboxMessageDeleted,
   getInboxMessageById,
+  getInboxMessages,
   InboxMessage,
 } from "@/lib/inbox-store";
 
@@ -228,18 +229,39 @@ export async function GET() {
       if (!error && data && data.length > 0) {
         for (const d of data as any[]) {
           if (!isInboxMessageDeleted(d.id)) {
+            const cleanedSubj = cleanLeadSubject(d.subject || "(No Subject)");
+            const cleanedHtml = cleanLeadBodyHtml(d.body_html || "");
+            const extracted = extractLeadDetailsFromHtml(
+              cleanedHtml,
+              cleanedSubj,
+              d.from_email || "info@hexacore.ng"
+            );
+            const resolvedFromName =
+              !d.from_name || d.from_name === "Hexacore" || d.from_name === "Sender"
+                ? extracted.fromName
+                : d.from_name;
+            const resolvedFromEmail =
+              !d.from_email || d.from_email === "info@hexacore.ng"
+                ? extracted.fromEmail
+                : d.from_email;
+
             addInboxMessage({
               id: d.id,
-              fromName: d.from_name || (d.from_email ? d.from_email.split("@")[0] : "Sender"),
-              fromEmail: d.from_email,
+              fromName: resolvedFromName,
+              fromEmail: resolvedFromEmail,
               toEmail: d.to_email || "info@hexacore.ng",
-              subject: d.subject || "(No Subject)",
-              date: d.created_at ? new Date(d.created_at).toLocaleString() : "Recently",
+              subject: cleanedSubj,
+              date: d.created_at
+                ? new Date(d.created_at).toLocaleString([], {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "Recently",
               rawDate: d.created_at,
-              preview:
-                d.preview ||
-                (d.body_html ? d.body_html.replace(/<[^>]*>?/gm, "").substring(0, 120) : ""),
-              bodyHtml: d.body_html || "",
+              preview: extracted.preview || d.preview || "",
+              bodyHtml: cleanedHtml,
               isUnread: d.is_unread ?? true,
               isStarred: d.is_starred ?? false,
             });
@@ -252,14 +274,14 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      messages: inMemoryInbox,
+      messages: getInboxMessages(),
       fromDb: false,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to fetch inbox messages";
     return NextResponse.json({
       success: true,
-      messages: inMemoryInbox,
+      messages: getInboxMessages(),
       fromDb: false,
       error: message,
     });
@@ -318,13 +340,20 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: false, error: "ID required" }, { status: 400 });
     }
 
-    const existing = getInboxMessageById(body.id);
-    if (existing) {
-      addInboxMessage({
-        ...existing,
-        ...(typeof body.isUnread === "boolean" ? { isUnread: body.isUnread } : {}),
-        ...(typeof body.isStarred === "boolean" ? { isStarred: body.isStarred } : {}),
-      });
+    updateInboxMessageState(body.id, {
+      isUnread: body.isUnread,
+      isStarred: body.isStarred,
+    });
+
+    try {
+      const dbUpdates: Record<string, boolean> = {};
+      if (typeof body.isUnread === "boolean") dbUpdates.is_unread = body.isUnread;
+      if (typeof body.isStarred === "boolean") dbUpdates.is_starred = body.isStarred;
+      if (Object.keys(dbUpdates).length > 0) {
+        await supabase.from("inbound_emails").update(dbUpdates).eq("id", body.id);
+      }
+    } catch {
+      // ignore if Supabase offline
     }
 
     return NextResponse.json({ success: true });
@@ -346,7 +375,11 @@ export async function DELETE(req: NextRequest) {
     removeInboxMessage(id);
 
     try {
-      await supabase.from("inbound_emails").delete().eq("id", id);
+      if (id === "all") {
+        await supabase.from("inbound_emails").delete().neq("id", "");
+      } else {
+        await supabase.from("inbound_emails").delete().eq("id", id);
+      }
     } catch {
       // Ignored
     }
